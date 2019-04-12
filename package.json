@@ -1,0 +1,23 @@
+{
+  "name": "kommand",
+  "version": "1.0.0",
+  "description": "Smart Home with Google Home",
+  "main": "webhook.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "keywords": [
+    "smart",
+    "home",
+    "google",
+    "home"
+  ],
+  "author": "Kaal Purush",
+  "license": "ISC",
+  "dependencies": {
+    "@shooontan/google-home-notifier": "0.0.4",
+    "actions-on-google": "^2.6.0",
+    "express": "^4.16.4",
+    "express-basic-auth": "^1.1.6"
+  }
+}
