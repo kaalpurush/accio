@@ -29,24 +29,26 @@ assistant.intent('control', conv => {
 });
 
 app.get('/', (req, res) => {
-    res.send('hello world!');
+    let out = { code: 200, message: 'hello world!' };
+    res.json(out);
 });
 
 app.post('/webhook', assistant);
 
 app.get('/broadcast', (req, res) => {
-	if(req.query.msg)
-    castMessage(req.query.msg)
-        .then(() => {
-            res.send('success');
-        });
-    else if(req.query.url)
-    castURL(req.query.url)
-        .then(() => {
-            res.send('success');
-        });
-     else
-           res.send('param missing');
+    let out = { code: 200, message: 'success' };
+    if (req.query.msg)
+        castMessage(req.query.msg)
+            .then(() => {
+                res.json(out);
+            });
+    else if (req.query.url)
+        castURL(req.query.url)
+            .then(() => {
+                res.json(out);
+            });
+    else
+        res.json({ code: 400, message: 'param missing!' });
 });
 
 const server = https.createServer(config.https.options, app);
