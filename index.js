@@ -1,5 +1,6 @@
 const express = require('express');
 const basicAuth = require('express-basic-auth')
+const http = require('http');
 const https = require('https');
 const bodyParser = require('body-parser');
 const { dialogflow } = require('actions-on-google');
@@ -33,6 +34,25 @@ app.get('/', (req, res) => {
     res.json(out);
 });
 
+app.get('/motion', (req, res) => {
+    if (req.query.id) {
+        let devices = ["lab room"];
+        let out = { code: 200, message: 'success' };
+        let id = req.query.id;
+        if (devices[id] !== undefined) {
+            castMessage('motion in ' + devices[id])
+                .then(() => {
+                    res.json(out);
+                });
+        } else {
+            res.json({ code: 400, message: 'invalid param value!' });
+        }
+
+    } else {
+        res.json({ code: 400, message: 'param missing!' });
+    }
+});
+
 app.post('/webhook', assistant);
 
 app.get('/broadcast', (req, res) => {
@@ -51,13 +71,24 @@ app.get('/broadcast', (req, res) => {
         res.json({ code: 400, message: 'param missing!' });
 });
 
-const server = https.createServer(config.https.options, app);
-server.listen(app.get('port'), () => {
+const httpsServer = https.createServer(config.https.options, app);
+httpsServer.listen(app.get('port'), () => {
     console.log('Express server started on port', app.get('port'));
+});
+
+const httpServer = http.createServer(app);
+httpServer.listen(80, () => {
+    console.log('Express server started on port', 80);
 });
 
 function castMessage(msg) {
     return new Promise((resolve, reject) => {
+
+        if (config.dryRun) {
+            console.log('casting: ' + msg);
+            return resolve();
+        }
+
         const notifier = GoogleHomeNotifier(config.google_home_device);
         notifier.say(msg)
             .then(() => {
@@ -71,6 +102,12 @@ function castMessage(msg) {
 
 function castURL(url) {
     return new Promise((resolve, reject) => {
+
+        if (config.dryRun) {
+            console.log('casting: ' + url);
+            return resolve();
+        }
+
         const notifier = GoogleHomeNotifier(config.google_home_device);
         notifier.play(url)
             .then(() => {
