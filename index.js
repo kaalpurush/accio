@@ -35,6 +35,7 @@ app.get('/', (req, res) => {
 });
 
 app.get('/motion', (req, res) => {
+    console.log('motion', req.query);
     if (req.query.id) {
         let devices = ["lab room"];
         let out = { code: 200, message: 'success' };
@@ -43,6 +44,8 @@ app.get('/motion', (req, res) => {
             castMessage('motion in ' + devices[id])
                 .then(() => {
                     res.json(out);
+                }).catch(e => {
+                    res.json({ code: 400, message: 'network error!' });
                 });
         } else {
             res.json({ code: 400, message: 'invalid param value!' });
@@ -61,14 +64,19 @@ app.get('/broadcast', (req, res) => {
         castMessage(req.query.msg)
             .then(() => {
                 res.json(out);
+            }).catch(e => {
+                res.json({ code: 400, message: 'network error!' });
             });
     else if (req.query.url)
         castURL(req.query.url)
             .then(() => {
                 res.json(out);
+            }).catch(e => {
+                res.json({ code: 400, message: 'network error!' });
             });
     else
         res.json({ code: 400, message: 'param missing!' });
+
 });
 
 const httpsServer = https.createServer(config.https.options, app);
@@ -93,9 +101,8 @@ function castMessage(msg) {
         notifier.say(msg)
             .then(() => {
                 resolve();
-            })
-            .catch((e) => {
-                reject(e);
+            }).catch(e => {
+                reject();
             });
     });
 }
@@ -112,9 +119,8 @@ function castURL(url) {
         notifier.play(url)
             .then(() => {
                 resolve();
-            })
-            .catch((e) => {
-                reject(e);
+            }).catch(e => {
+                reject();
             });
     });
 }
