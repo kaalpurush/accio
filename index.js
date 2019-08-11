@@ -4,6 +4,7 @@ const http = require('http');
 const https = require('https');
 const bodyParser = require('body-parser');
 const { dialogflow } = require('actions-on-google');
+const exec = require('child_process').exec;
 
 var dgram = require('dgram');
 
@@ -24,8 +25,10 @@ app.use(bodyParser.json({ type: 'application/json' }));
 
 assistant.intent('control', conv => {
     console.log(conv.parameters);
+    console.log(conv.query);
     conv.add(`Immediately sir! \n`);
     conv.close('Carrying out command:' + conv.query);
+    processCommand(conv.query);
     broadcast(conv.query);
 });
 
@@ -88,6 +91,20 @@ const httpServer = http.createServer(app);
 httpServer.listen(80, () => {
     console.log('Express server started on port', 80);
 });
+
+function processCommand(command) {
+    if (command.toLowerCase().indexOf('tv') < 0) return false;
+    let cmd = 'sh ' + __dirname + '/shield-shutdown.sh';
+    console.log('cmd', cmd);
+    exec(cmd,
+        (error, stdout, stderr) => {
+            if (error)
+                console.error(error);
+            console.log(stdout);
+            if (error)
+                console.error(stderr);
+        });
+}
 
 function castMessage(msg) {
     return new Promise((resolve, reject) => {
