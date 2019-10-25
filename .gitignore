@@ -1,1 +1,6 @@
 /config.js
+/accio_esp32/config.h
+/live
+.vscode
+/node_modules
+/package-lock.json
