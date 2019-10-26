@@ -1,9 +1,10 @@
-#include "WiFi.h"
-#include "AsyncUDP.h"
-#include "HTTPClient.h"
-#include "IRremote.h"
-#include "config.h"
+#include <WiFi.h>
+#include <AsyncUDP.h>
+#include <HTTPClient.h>
+#include <IRremote.h>
 #include <esp32DHT.h>
+
+#include "config.h"
 
 const char *ssid = WIFI_SSID;
 const char *password = WIFI_PASSWORD;
@@ -143,31 +144,28 @@ void setupUDPListener()
       Serial.print("State: ");
       Serial.println(state);
 
+      blinkLed();
+
       if (str.indexOf("cooler") >= 0)
       {
         if (state == "ff")
         {
-          blinkLed();
           irsend.sendRaw(IR_OFF, sizeof(IR_OFF) / sizeof(int), khz);
         }
         else if (state == "on")
         {
-          blinkLed();
           irsend.sendRaw(IR_ON, sizeof(IR_ON) / sizeof(int), khz);
         }
         else if (state == "30")
         {
-          blinkLed();
           irsend.sendRaw(IR_30, sizeof(IR_30) / sizeof(int), khz);
         }
         else if (state == "29")
         {
-          blinkLed();
           irsend.sendRaw(IR_29, sizeof(IR_29) / sizeof(int), khz);
         }
         else if (state == "28")
         {
-          blinkLed();
           irsend.sendRaw(IR_28, sizeof(IR_28) / sizeof(int), khz);
         }
       }
@@ -185,15 +183,12 @@ void setupUDPListener()
       else if (str.indexOf("weather") >= 0)
       {
         char url[100];
-        packet.printf("temperature: %g, humidity: %g", temperature, humidity);
         sprintf(url, "/weather?t=%g&h=%g", temperature, humidity);
         sendNotifyEvent(url);
-        return 1;
       }
 
       //reply to the client
       packet.printf("Got %u bytes of data", packet.length());
-      return 1;
     });
   }
 }
@@ -242,7 +237,7 @@ void setupDHT()
 void blinkLed()
 {
   digitalWrite(ledPin, HIGH);
-  delay(1000);
+  delay(500);
   digitalWrite(ledPin, LOW);
 }
 
@@ -263,7 +258,9 @@ void loop()
     sendNotifyEvent("/motion?id=0");
   }
 
-  dht.read();
-
-  delay(500);
+  static uint32_t lastMillis = 0;
+  if (millis() - lastMillis > 30000) {
+      lastMillis = millis();
+      dht.read();
+  }
 }

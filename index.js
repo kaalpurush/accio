@@ -29,7 +29,7 @@ assistant.intent('control', conv => {
     conv.add(`Immediately sir! \n`);
     conv.close('Carrying out command:' + conv.query);
     processCommand(conv.query);
-    broadcast(conv.query);
+    broadcast(conv.parameters.location + " " + conv.parameters.device + " " + conv.parameters.state);
 });
 
 app.get('/', (req, res) => {
