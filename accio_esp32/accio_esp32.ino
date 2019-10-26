@@ -8,7 +8,7 @@
 const char *ssid = WIFI_SSID;
 const char *password = WIFI_PASSWORD;
 
-const char *motion_notify_url = MOTION_NOTIFY_URL;
+const char *notify_url = NOTIFY_URL;
 
 //esp led pin
 const int ledPin = 2;
@@ -39,11 +39,11 @@ volatile int8_t result = 0;
 volatile float humidity = 0;
 volatile float temperature = 0;
 
-void sendMotionDetectionEvent()
+void sendNotifyEvent(const String &eventURI)
 {
   HTTPClient http;
-  http.begin(motion_notify_url); //HTTP
-  Serial.print("Sending motion request...");
+  http.begin(notify_url + eventURI); //HTTP
+  Serial.print("Sending request...");
   // start connection and send HTTP header
   int httpCode = http.GET();
   Serial.print("Got response code:");
@@ -56,7 +56,7 @@ void sendMotionDetectionEvent()
     if (httpCode == HTTP_CODE_OK)
     {
       String payload = http.getString();
-      Serial.print("Motion request response text:");
+      Serial.print("Request response text:");
       Serial.println(payload);
     }
   }
@@ -184,7 +184,10 @@ void setupUDPListener()
       }
       else if (str.indexOf("weather") >= 0)
       {
+        char url[100];
         packet.printf("temperature: %g, humidity: %g", temperature, humidity);
+        sprintf(url, "/weather?t=%g&h=%g", temperature, humidity);
+        sendNotifyEvent(url);
         return 1;
       }
 
@@ -257,7 +260,7 @@ void loop()
   if (sensorState == 1)
   {
     sensorState = 0;
-    sendMotionDetectionEvent();
+    sendNotifyEvent("/motion?id=0");
   }
 
   dht.read();

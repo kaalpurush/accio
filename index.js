@@ -59,6 +59,22 @@ app.get('/motion', (req, res) => {
     }
 });
 
+
+app.get('/weather', (req, res) => {
+    console.log('weather', req.query);
+    if (req.query.t && req.query.h) {
+        let out = { code: 200, message: 'success' };
+        castMessage("temparature: " + req.query.t + " degree celcius, humidity: " + req.query.h + "%")
+            .then(() => {
+                res.json(out);
+            }).catch(e => {
+                res.json({ code: 400, message: 'network error!' });
+            });
+    } else {
+        res.json({ code: 400, message: 'param missing!' });
+    }
+});
+
 app.post('/webhook', assistant);
 
 app.get('/broadcast', (req, res) => {
