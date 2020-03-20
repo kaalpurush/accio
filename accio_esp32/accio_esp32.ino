@@ -44,11 +44,10 @@ void sendNotifyEvent(const String &eventURI)
 {
   HTTPClient http;
   http.begin(notify_url + eventURI); //HTTP
-  Serial.print("Sending request...");
+  Serial.print("Sending request..." + eventURI);
   // start connection and send HTTP header
   int httpCode = http.GET();
-  Serial.print("Got response code:");
-  Serial.println(httpCode);
+  Serial.printf("Got response code: %d\n", httpCode);
 
   // httpCode will be negative on error
   if (httpCode > 0)
@@ -57,8 +56,7 @@ void sendNotifyEvent(const String &eventURI)
     if (httpCode == HTTP_CODE_OK)
     {
       String payload = http.getString();
-      Serial.print("Request response text:");
-      Serial.println(payload);
+      Serial.printf("Request response text: %s\n", payload);
     }
   }
 
@@ -97,8 +95,7 @@ void setupWIFI()
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
+  Serial.printf("Connecting to %s\n", ssid);
 
   if (WiFi.waitForConnectResult() != WL_CONNECTED)
   {
@@ -216,7 +213,7 @@ void ICACHE_RAM_ATTR handleError(uint8_t e)
 {
   error = e;
   result = -1;
-  Serial.printf("DHT Error: %d\n", error);
+  Serial.printf("DHT Error: %u\n", error);
 }
 
 void setupDHT()
@@ -259,8 +256,11 @@ void loop()
   }
 
   static uint32_t lastMillis = 0;
-  if (millis() - lastMillis > 30000) {
-      lastMillis = millis();
-      dht.read();
+  if (millis() - lastMillis > 5000) {
+    lastMillis = millis();
+    dht.read();
+    delay(500);
+    dht.read();
   }
+
 }
