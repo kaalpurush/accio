@@ -21,6 +21,9 @@ const app = express();
 app.set('port', process.env.PORT || 443);
 app.use(bodyParser.json({ type: 'application/json' }));
 
+const SUCCESS_MSG = 'done sir!';
+const FAIL_MSG = 'sorry, failed!';
+
 // app.use(basicAuth({
 //     users: config.auth
 // }));
@@ -28,16 +31,20 @@ app.use(bodyParser.json({ type: 'application/json' }));
 assistant.intent('control', conv => {
     console.log(conv.parameters);
     console.log(conv.query);
-    conv.add(`Immediately sir! \n`);
-    conv.close('Carrying out command:' + conv.query);
-    processCommand(conv.query, conv.parameters);
-    broadcast(conv.parameters.location + " " + conv.parameters.device + " " + conv.parameters.state);
+
+    conv.add('carrying out command:' + conv.query);
+
+    udpBroadcast(conv.parameters.location + " " + conv.parameters.device + " " + conv.parameters.state);
+
+    return processAssistantIntent(conv);
 });
 
 app.get('/', (req, res) => {
     let out = { code: 200, message: 'hello world!' };
     res.json(out);
 });
+
+app.post('/webhook', assistant);
 
 app.get('/motion', (req, res) => {
     console.log('motion', req.query);
@@ -77,53 +84,19 @@ app.get('/weather', (req, res) => {
     }
 });
 
-app.get('/air/status', (req, res) => {
-    getAirStatus(req, res, req.query.broadcast)
-});
-
-function getAirStatus(req, res, broadcast) {
+app.get('/kommand', (req, res) => {
     let out = { code: 200, message: 'success' };
-    miio
-        .device({ address: config.miIOT.ip, token: config.miIOT.token })
-        .then(device => Promise.all(
-            [
-                device.power(),
-                device.temperature(),
-                device.relativeHumidity(),
-                device.pm2_5()
-            ]
-        ))
-        .then(([s, t, h, p]) => {
-            res && res.json({ status: s, temperature: t, humidity: h, pm2_5: p });
-            if (broadcast)
-                castMessage(
-                    `
-                        temparature: ${t.celsius.toFixed(2)} °C,
-                        humidity: ${h}%,
-                        air quality: ${p},
-                        air purifier: ${s == true ? 'on' : 'off'}
-                        `
-                )
-        })
-        .catch(err => res && res.json(err));
-}
+    const params = { device: req.query.device, state: req.query.state };
 
-app.get('/air/:command', (req, res) => {
-    let out = { code: 200, message: 'success' };
-    miio
-        .device({ address: config.miIOT.ip, token: config.miIOT.token })
-        .then(device => { return runAirCommand(device, req.params.command) })
-        .then(() => res.json(out))
-        .catch(err => res.json(err));
+    if (params.device && params.state)
+        execCommand(params)
+            .then(r => res.json(r ? r : out))
+            .catch(e => {
+                res.json({ code: 400, message: 'error!' });
+            });
+    else
+        res.status(404).end()
 });
-
-function runAirCommand(device, command) {
-    if (command == 'on' || command == 'off')
-        return device.setPower(command == 'on')
-}
-
-
-app.post('/webhook', assistant);
 
 app.all('/broadcast', (req, res) => {
     let out = { code: 200, message: 'success' };
@@ -161,26 +134,72 @@ httpServer.listen(80, () => {
     console.log('Express server started on port', 80);
 });
 
-function processCommand(command, params) {
-    if (command.toLowerCase().indexOf('tv') >= 0) {
-        let cmd = 'sh ' + __dirname + '/shield-shutdown.sh';
-        console.log('cmd', cmd);
-        exec(cmd,
-            (error, stdout, stderr) => {
-                if (error)
-                    console.error(error);
-                console.log(stdout);
-                if (error)
-                    console.error(stderr);
+function getAirStatus() {
+    return new Promise((resolve, reject) => {
+        miio
+            .device({ address: config.miIOT.ip, token: config.miIOT.token })
+            .then(device => Promise.all(
+                [
+                    device.power(),
+                    device.temperature(),
+                    device.relativeHumidity(),
+                    device.pm2_5()
+                ]
+            ))
+            .then(([s, t, h, p]) => {
+                resolve({ status: s, temperature: parseFloat(t.celsius.toFixed(2)), humidity: h, pm2_5: p })
+            })
+            .catch(err => reject(err));
+    });
+}
+
+function processAssistantIntent(conv) {
+    if (conv.parameters.device == 'purifier' && conv.parameters.state == 'status') {
+        return execCommand(conv.parameters)
+            .then(r => {
+                conv.close(
+                    `
+                    temparature: ${r.temperature} °C,
+                    humidity: ${r.humidity}%,
+                    air quality: ${r.pm2_5},
+                    air purifier: ${r.status == true ? 'on' : 'off'}
+                    `
+                )
             });
-    } else if (params.device == 'purifier') {
-        params.state == 'status' ? getAirStatus(null, null, true) :
-            miio
-                .device({ address: config.miIOT.ip, token: config.miIOT.token })
-                .then(device => device.setPower(params.state == 'on'))
-                .then(() => { })
-                .catch(err => { });
+    } else {
+        return execCommand(conv.parameters)
+            .then(r => conv.close(SUCCESS_MSG))
+            .catch(e => conv.close(FAIL_MSG));
     }
+}
+
+function execCommand(params) {
+    return new Promise((resolve, reject) => {
+        if (params.device == 'tv') {
+            let cmd = 'sh ' + __dirname + '/shield-shutdown.sh';
+            console.log('cmd', cmd);
+            exec(cmd,
+                (error, stdout, stderr) => {
+                    if (error)
+                        reject()
+                    resolve();
+                });
+        } else if (params.device == 'purifier') {
+            if (params.state == 'status') {
+                getAirStatus()
+                    .then(r => resolve(r))
+                    .catch(e => reject());
+            } else {
+                miio
+                    .device({ address: config.miIOT.ip, token: config.miIOT.token })
+                    .then(device => device.setPower(params.state == 'on'))
+                    .then(r => resolve())
+                    .catch(e => reject());
+            }
+        } else {
+            reject();
+        }
+    });
 }
 
 function castMessage(msg) {
@@ -219,7 +238,7 @@ function castURL(url) {
     });
 }
 
-function broadcast(msg) {
+function udpBroadcast(msg) {
     var message = new Buffer(msg);
 
     var client = dgram.createSocket('udp4');
