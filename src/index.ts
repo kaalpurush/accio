@@ -1,19 +1,19 @@
 import * as express from 'express';
-
-// const basicAuth = require('express-basic-auth')
+// import * as basicAuth from 'express-basic-auth';
 import * as http from 'http';
 import * as https from 'https';
 import * as bodyParser from 'body-parser';
 import { dialogflow, Parameters, DialogflowConversation, BasicCard, SimpleResponse } from 'actions-on-google';
 import * as child_process from 'child_process';
 import * as dgram from 'dgram';
-
 const exec = child_process.exec;
+import { GoogleHomeNotifier } from '@shooontan/google-home-notifier';
+import miio = require('miio');
+
 import config from './config';
 
-import { GoogleHomeNotifier } from '@shooontan/google-home-notifier';
-
-import miio = require('miio');
+const SUCCESS_MSG = 'Done sir!';
+const FAIL_MSG = 'Sorry, failed!';
 
 const assistant = dialogflow();
 
@@ -22,32 +22,29 @@ const app = express();
 app.set('port', process.env.PORT || 443);
 app.use(bodyParser.json({ type: 'application/json' }));
 
-const SUCCESS_MSG = 'Done sir!';
-const FAIL_MSG = 'Sorry, failed!';
-
 // app.use(basicAuth({
 //     users: config.auth
 // }));
 
 assistant.intent('control', (conv) => {
-    console.log(conv.parameters);
     console.log(conv.query);
+    console.log(conv.parameters);
 
     conv.add('Carrying out command: ' + conv.query);
 
-    udpBroadcast(`${conv.parameters.location} ${conv.parameters.device} ${conv.parameters.state}`);
+    broadcastUDP(`${conv.parameters.location} ${conv.parameters.device} ${conv.parameters.state}`);
 
     return processAssistantIntent(conv);
 });
 
-app.get('/', (req, res) => {
+app.get('/', (req: express.Request, res: express.Response) => {
     const out = { code: 200, message: 'hello world!' };
     res.json(out);
 });
 
 app.post('/webhook', assistant);
 
-app.get('/motion', (req, res) => {
+app.get('/motion', (req: express.Request, res: express.Response) => {
     if (req.query.id) {
         const devices = ['lab room'];
         const out = { code: 200, message: 'success' };
@@ -69,7 +66,7 @@ app.get('/motion', (req, res) => {
 });
 
 
-app.get('/weather', (req, res) => {
+app.get('/weather', (req: express.Request, res: express.Response) => {
     if (req.query.t && req.query.h) {
         const out = { code: 200, message: 'success' };
         castMessage('temparature: ' + req.query.t + ' degree celcius, humidity: ' + req.query.h + '%')
@@ -83,7 +80,7 @@ app.get('/weather', (req, res) => {
     }
 });
 
-app.get('/kommand', (req, res) => {
+app.get('/kommand', (req: express.Request, res: express.Response) => {
     const out = { code: 200, message: 'success' };
     const params = { device: req.query.device, state: req.query.state };
 
@@ -98,7 +95,7 @@ app.get('/kommand', (req, res) => {
     }
 });
 
-app.all('/broadcast', (req, res) => {
+app.all('/broadcast', (req: express.Request, res: express.Response) => {
     const out = { code: 200, message: 'success' };
 
     const msg = req.query.msg ? req.query.msg : req.body.msg;
@@ -187,7 +184,7 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
     }
 }
 
-function execCommand(params: Parameters) {
+function execCommand(params: Parameters): Promise<any> {
     return new Promise<IDeviceData>((resolve, reject) => {
         if (params.device === 'tv' && params.state === 'off') {
             const cmd = 'sh ' + __dirname + '/shield-shutdown.sh';
@@ -217,7 +214,7 @@ function execCommand(params: Parameters) {
     });
 }
 
-function castMessage(msg: string) {
+function castMessage(msg: string): Promise<void> {
     return new Promise((resolve, reject) => {
 
         if (config.dryRun) {
@@ -234,7 +231,7 @@ function castMessage(msg: string) {
     });
 }
 
-function castURL(url: string) {
+function castURL(url: string): Promise<void> {
     return new Promise((resolve, reject) => {
 
         if (config.dryRun) {
@@ -251,7 +248,7 @@ function castURL(url: string) {
     });
 }
 
-function udpBroadcast(msg: string) {
+function broadcastUDP(msg: string) {
     const message = new Buffer(msg);
 
     const client = dgram.createSocket('udp4');
