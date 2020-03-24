@@ -1,4 +1,5 @@
-/config.js
+*.js
+config.ts
 /accio_esp32/config.h
 /live
 .vscode

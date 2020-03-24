@@ -4,7 +4,8 @@
   "description": "Smart Home with Google Home",
   "main": "webhook.js",
   "scripts": {
-    "start": "node index.js"
+    "build": "tsc ./src/index.ts",
+    "start": "node ./src/index.js"
   },
   "keywords": [
     "smart",
@@ -20,5 +21,12 @@
     "express": "^4.16.4",
     "express-basic-auth": "^1.1.6",
     "miio": "github:kingkong123/miio"
+  },
+  "devDependencies": {
+    "@types/node": "^13.9.3",
+    "@types/express": "^4.17.3",
+    "typescript": "^3.8.3",
+    "tslint": "^5.16.0",
+    "tslint-lines-between-class-members": "^1.3.1"
   }
 }
