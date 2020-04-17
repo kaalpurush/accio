@@ -7,10 +7,6 @@
         100
       ]
     },
-    "lines-between-class-members": [
-      true,
-      1
-    ],
     "member-ordering": false,
     "no-consecutive-blank-lines": false,
     "ordered-imports": false,

@@ -32,8 +32,6 @@ assistant.intent('control', (conv) => {
 
     conv.add('Carrying out command: ' + conv.query);
 
-    broadcastUDP(`${conv.parameters.location} ${conv.parameters.device} ${conv.parameters.state}`);
-
     return processAssistantIntent(conv);
 });
 
@@ -152,7 +150,7 @@ function getAirStatus() {
                 ]
             ))
             .then(([s, t, h, p]) => {
-                resolve({ status: s, temperature: t, humidity: h, pm2_5: p });
+                resolve({ status: s, temperature: t.celsius, humidity: h, pm2_5: p });
             })
             .catch((err: any) => reject(err));
     });
@@ -186,6 +184,9 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
 
 function execCommand(params: Parameters): Promise<any> {
     return new Promise<IDeviceData>((resolve, reject) => {
+
+        broadcastUDP(`${params.location} ${params.device} ${params.state}`);
+
         if (params.device === 'tv' && params.state === 'off') {
             const cmd = 'sh ' + __dirname + '/shield-shutdown.sh';
             console.log('cmd', cmd);
@@ -209,7 +210,7 @@ function execCommand(params: Parameters): Promise<any> {
                     .catch(() => reject());
             }
         } else {
-            reject();
+            resolve();
         }
     });
 }
