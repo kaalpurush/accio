@@ -12,8 +12,12 @@ import miio = require('miio');
 
 import config from './config';
 
+let airDevice: any;
+
 const SUCCESS_MSG = 'Done sir!';
 const FAIL_MSG = 'Sorry, failed!';
+const ANYTHING_ELSE_MSG = 'Anything else, sir?';
+const SUCCESS_JSON = { code: 200, message: 'success' };
 
 const assistant = dialogflow();
 
@@ -45,12 +49,11 @@ app.post('/webhook', assistant);
 app.get('/motion', (req: express.Request, res: express.Response) => {
     if (req.query.id) {
         const devices = ['lab room'];
-        const out = { code: 200, message: 'success' };
         const id = req.query.id;
         if (devices[id] !== undefined) {
             castMessage('motion in ' + devices[id])
                 .then(() => {
-                    res.json(out);
+                    res.json(SUCCESS_JSON);
                 }).catch(() => {
                     res.json({ code: 400, message: 'network error!' });
                 });
@@ -66,10 +69,9 @@ app.get('/motion', (req: express.Request, res: express.Response) => {
 
 app.get('/weather', (req: express.Request, res: express.Response) => {
     if (req.query.t && req.query.h) {
-        const out = { code: 200, message: 'success' };
         castMessage('temparature: ' + req.query.t + ' degree celcius, humidity: ' + req.query.h + '%')
             .then(() => {
-                res.json(out);
+                res.json(SUCCESS_JSON);
             }).catch(() => {
                 res.json({ code: 400, message: 'network error!' });
             });
@@ -79,14 +81,13 @@ app.get('/weather', (req: express.Request, res: express.Response) => {
 });
 
 app.get('/kommand', (req: express.Request, res: express.Response) => {
-    const out = { code: 200, message: 'success' };
     const params = { device: req.query.device, state: req.query.state };
 
     if (params.device && params.state) {
         execCommand(params)
-            .then((r) => res.json(r ? r : out))
-            .catch(() => {
-                res.json({ code: 400, message: 'error!' });
+            .then((r) => res.json(r ? r : SUCCESS_JSON))
+            .catch((e) => {
+                res.json({ code: 400, message: 'error!', error: e });
             });
     } else {
         res.status(404).end();
@@ -94,8 +95,6 @@ app.get('/kommand', (req: express.Request, res: express.Response) => {
 });
 
 app.all('/broadcast', (req: express.Request, res: express.Response) => {
-    const out = { code: 200, message: 'success' };
-
     const msg = req.query.msg ? req.query.msg : req.body.msg;
 
     const url = req.query.url ? req.query.url : req.body.url;
@@ -103,14 +102,14 @@ app.all('/broadcast', (req: express.Request, res: express.Response) => {
     if (msg) {
         castMessage(msg)
             .then(() => {
-                res.json(out);
+                res.json(SUCCESS_JSON);
             }).catch(() => {
                 res.json({ code: 400, message: 'network error!' });
             });
     } else if (url) {
         castURL(url)
             .then(() => {
-                res.json(out);
+                res.json(SUCCESS_JSON);
             }).catch(() => {
                 res.json({ code: 400, message: 'network error!' });
             });
@@ -120,19 +119,90 @@ app.all('/broadcast', (req: express.Request, res: express.Response) => {
 
 });
 
+app.get('/web-push', (req: express.Request, res: express.Response) => {
+    res.sendFile('public/web-push.html', { root: __dirname + '/../' });
+});
+
+app.post('/web-push', (req: express.Request, res: express.Response) => {
+    assignPushTokenToTopic(req.body.token, 'kommand');
+    res.json(SUCCESS_JSON);
+});
+
+app.use(express.static('public'));
+
 const httpsServer = https.createServer(config.https.options, app);
 httpsServer.listen(app.get('port'), () => {
-    console.log('Express server started on port', app.get('port'));
+    console.log('https server started on port', app.get('port'));
 });
 
 const httpServer = http.createServer(app);
 httpServer.listen(80, () => {
-    console.log('Express server started on port', 80);
+    console.log('http server started on port', 80);
 });
+
+function assignPushTokenToTopic(token: string, topic: string) {
+    const options = {
+        hostname: 'iid.googleapis.com',
+        port: 443,
+        path: '/iid/v1/' + token + '/rel/topics/' + topic,
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': config.firebaseServerKey
+        }
+    };
+
+    const req = https.request(options, (res) => {
+        console.log(`assignToTopic:statusCode: ${res.statusCode}`);
+    });
+
+    req.on('error', (error) => {
+        console.error(error);
+    });
+
+    req.write('');
+    req.end();
+}
+
+function sendPush(title: string, body: string, collapse_key: string = 'kommand') {
+    const options = {
+        hostname: 'fcm.googleapis.com',
+        port: 443,
+        path: '/fcm/send',
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': config.firebaseServerKey
+        }
+    };
+
+    const req = https.request(options, (res) => {
+        console.log(`sendPush:statusCode: ${res.statusCode}`);
+    });
+
+    req.on('error', (error) => {
+        console.error(error);
+    });
+
+    const jsonBody = {
+        to: '/topics/kommand',
+        notification: {
+            title,
+            body,
+            icon: 'https://image.flaticon.com/icons/png/128/2004/2004705.png',
+            click_action: config.baseUrl
+        },
+        collapse_key,
+        time_to_live: 300
+    };
+
+    req.write(JSON.stringify(jsonBody));
+    req.end();
+}
 
 interface IDeviceData {
     status: boolean;
-    temperature: any;
+    temperature: number;
     humidity: number;
     pm2_5: number;
 }
@@ -141,14 +211,17 @@ function getAirStatus() {
     return new Promise<IDeviceData>((resolve, reject) => {
         miio
             .device({ address: config.miIOT.ip, token: config.miIOT.token })
-            .then((device: any) => Promise.all(
-                [
-                    device.power(),
-                    device.temperature(),
-                    device.relativeHumidity(),
-                    device.pm2_5()
-                ]
-            ))
+            .then((device: any) => {
+                addAirEventHandler(device);
+                return Promise.all(
+                    [
+                        device.power(),
+                        device.temperature(),
+                        device.relativeHumidity(),
+                        device.pm2_5()
+                    ]
+                );
+            })
             .then(([s, t, h, p]) => {
                 resolve({ status: s, temperature: t.celsius, humidity: h, pm2_5: p });
             })
@@ -156,12 +229,24 @@ function getAirStatus() {
     });
 }
 
+function addAirEventHandler(device: any) {
+    if (airDevice == null) {
+        airDevice = device;
+        // airDevice.on('power', (power: boolean) => {
+        //     sendPush('Kommand', 'Purifier State: ' + (power === true ? 'On' : 'Off'));
+        // });
+        airDevice.on('pm2.5Changed', (pm2_5: number) => {
+            sendPush('Kommand', 'Purifier PM2.5: ' + pm2_5, 'purifier');
+        });
+    }
+}
+
 function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
     if (conv.parameters.device === 'purifier' && conv.parameters.state === 'status') {
         return execCommand(conv.parameters)
             .then((r: IDeviceData) => {
                 const text = `
-                Temparature: ${r.temperature} °C
+                Temparature: ${r.temperature.toFixed(1)} °C
                 Humidity: ${r.humidity}%
                 Air Quality: ${r.pm2_5}
                 Air Purifier: ${r.status === true ? 'On' : 'Off'}
@@ -174,6 +259,10 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
 
                     // })
                 );
+            })
+            .catch((e) => {
+                console.error(e);
+                conv.ask(FAIL_MSG);
             });
     } else {
         return execCommand(conv.parameters)
@@ -182,10 +271,16 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
     }
 }
 
+function broadcastCommand(params: Parameters) {
+    const command = `${params.location} ${params.device} ${params.state}`;
+    sendPush('Kommand', command);
+    broadcastUDP(command);
+}
+
 function execCommand(params: Parameters): Promise<any> {
     return new Promise<IDeviceData>((resolve, reject) => {
 
-        broadcastUDP(`${params.location} ${params.device} ${params.state}`);
+        broadcastCommand(params);
 
         if (params.device === 'tv' && params.state === 'off') {
             const cmd = 'sh ' + __dirname + '/shield-shutdown.sh';

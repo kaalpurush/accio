@@ -1,0 +1,69 @@
+<!-- The core Firebase JS SDK is always required and must be listed first -->
+<script src="https://www.gstatic.com/firebasejs/7.14.2/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/7.14.2/firebase-messaging.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.x.x/dist/alpine.min.js"></script>
+
+<!-- TODO: Add SDKs for Firebase products that you want to use
+     https://firebase.google.com/docs/web/setup#available-libraries -->
+
+<script>
+  // Your web app's Firebase configuration
+  var firebaseConfig = {
+    apiKey: "AIzaSyB6VKTeRhrPbHN66WejEpoUdJQbmMxKsHM",
+    authDomain: "kaal.firebaseapp.com",
+    databaseURL: "https://kaal.firebaseio.com",
+    projectId: "firebase-kaal",
+    storageBucket: "firebase-kaal.appspot.com",
+    messagingSenderId: "487227687849",
+    appId: "1:487227687849:web:c0a47f44bb147e3d287ab8"
+  };
+  // Initialize Firebase
+  firebase.initializeApp(firebaseConfig);
+
+  async function requestPermission() {
+    try {
+      const messaging = firebase.messaging();
+      await messaging.requestPermission();
+      const token = await messaging.getToken();
+      return token;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  async function registerPush() {
+    let token = await requestPermission();
+    if (token) {
+      sendPushToken({ token: token });
+    }
+  }
+
+  function sendPushToken(data) {
+    fetch(location.href, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Success:', data);
+      })
+      .catch((error) => {
+        console.error('Error:', error);
+      });
+  }
+
+  (async () => {
+    registerPush();
+  })();
+
+</script>
+Why man? why?
+
+<div x-data="{}">
+  <div>Notification permission: <strong x-text="Notification.permission"></strong></div>
+  <div> Browser: <strong x-text="navigator.appName"></strong> </div>
+  <div> Platform: <strong x-text="navigator.platform"></strong> </div>
+</div>

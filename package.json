@@ -5,7 +5,8 @@
   "main": "webhook.js",
   "scripts": {
     "build": "tsc ./src/index.ts",
-    "start": "node ./src/index.js"
+    "start": "node ./src/index.js",
+    "dev" : "ts-node-dev ./src/index.ts"
   },
   "keywords": [
     "smart",
