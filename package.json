@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc ./src/index.ts",
     "start": "node ./src/index.js",
-    "dev" : "ts-node-dev ./src/index.ts"
+    "dev": "ts-node-dev ./src/index.ts"
   },
   "keywords": [
     "smart",
@@ -24,9 +24,10 @@
     "miio": "github:kingkong123/miio"
   },
   "devDependencies": {
-    "@types/node": "^13.9.3",
     "@types/express": "^4.17.3",
-    "typescript": "^3.8.3",
-    "tslint": "^5.16.0"
+    "@types/node": "^13.9.3",
+    "ts-node-dev": "^1.0.0-pre.61",
+    "tslint": "^5.16.0",
+    "typescript": "^3.8.3"
   }
 }

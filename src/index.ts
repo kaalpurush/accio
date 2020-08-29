@@ -229,6 +229,25 @@ function getAirStatus() {
     });
 }
 
+function getApiResponse(client, options): Promise<any> {
+    return new Promise((resolve, reject) => {
+        client.get(options, (res) => {
+            console.log(`Api:statusCode: ${res.statusCode}`);
+            let data = '';
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            res.on('end', () => {
+                resolve(JSON.parse(data));
+            });
+
+        }).on('error', (error) => {
+            console.error(error);
+            reject();
+        });
+    });
+}
+
 function addAirEventHandler(device: any) {
     if (airDevice == null) {
         airDevice = device;
@@ -240,6 +259,7 @@ function addAirEventHandler(device: any) {
         });
     }
 }
+
 
 function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
     if (conv.parameters.device === 'purifier' && conv.parameters.state === 'status') {
@@ -264,11 +284,44 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
                 console.error(e);
                 conv.ask(FAIL_MSG);
             });
-    } else {
-        return execCommand(conv.parameters)
-            .then(() => conv.ask(SUCCESS_MSG))
-            .catch(() => conv.ask(FAIL_MSG));
     }
+
+    if (conv.parameters.device === 'energy' && conv.parameters.state === 'status') {
+        return execCommand(conv.parameters)
+            .then((r: any) => {
+                const text = `
+                Usage: ${r.data.CurrentConsumption},
+                Balance: ${r.data.RemainingBalance}
+                `;
+                conv.ask(text);
+            })
+            .catch((e) => {
+                console.error(e);
+                conv.ask(FAIL_MSG);
+            });
+    }
+
+    if (conv.parameters.device === 'mobile' && conv.parameters.state === 'status') {
+        return execCommand(conv.parameters)
+            .then((r: any) => {
+                const text = `
+                Balance: ${r.balance},
+                Internet: ${r.internet.value},
+                Voice: ${r.voice.value},
+                SMS: ${r.sms.value}
+                `;
+                conv.ask(text);
+            })
+            .catch((e) => {
+                console.error(e);
+                conv.ask(FAIL_MSG);
+            });
+    }
+
+    return execCommand(conv.parameters)
+        .then(() => conv.ask(SUCCESS_MSG))
+        .catch(() => conv.ask(FAIL_MSG));
+
 }
 
 function broadcastCommand(params: Parameters) {
@@ -277,10 +330,10 @@ function broadcastCommand(params: Parameters) {
     broadcastUDP(command);
 }
 
-function execCommand(params: Parameters): Promise<any> {
-    return new Promise<IDeviceData>((resolve, reject) => {
+function execCommand(params: Parameters): Promise<IDeviceData | any> {
+    return new Promise<IDeviceData | any>((resolve, reject) => {
 
-        broadcastCommand(params);
+        // broadcastCommand(params);
 
         if (params.device === 'tv' && params.state === 'off') {
             const cmd = 'sh ' + __dirname + '/shield-shutdown.sh';
@@ -304,6 +357,14 @@ function execCommand(params: Parameters): Promise<any> {
                     .then(() => resolve())
                     .catch(() => reject());
             }
+        } else if (params.device === 'energy') {
+            getApiResponse(http, config.energyApi.options)
+                .then((r) => resolve(r))
+                .catch(() => reject());
+        } else if (params.device === 'mobile') {
+            getApiResponse(https, config.mobileApi.options)
+                .then((r) => resolve(r))
+                .catch(() => reject());
         } else {
             resolve();
         }
