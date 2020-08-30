@@ -9,6 +9,7 @@ import * as dgram from 'dgram';
 const exec = child_process.exec;
 import { GoogleHomeNotifier } from '@shooontan/google-home-notifier';
 import miio = require('miio');
+import schedule = require('node-schedule');
 
 import config from './config';
 
@@ -128,6 +129,10 @@ app.post('/web-push', (req: express.Request, res: express.Response) => {
     res.json(SUCCESS_JSON);
 });
 
+app.get('/dash', (req: express.Request, res: express.Response) => {
+    res.sendFile('public/dashboard.html', { root: __dirname + '/../' });
+});
+
 app.use(express.static('public'));
 
 const httpsServer = https.createServer(config.https.options, app);
@@ -232,7 +237,6 @@ function getAirStatus() {
 function getApiResponse(client, options): Promise<any> {
     return new Promise((resolve, reject) => {
         client.get(options, (res) => {
-            console.log(`Api:statusCode: ${res.statusCode}`);
             let data = '';
             res.on('data', (chunk) => {
                 data += chunk;
@@ -290,8 +294,8 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
         return execCommand(conv.parameters)
             .then((r: any) => {
                 const text = `
-                Usage: ${r.data.CurrentConsumption},
-                Balance: ${r.data.RemainingBalance}
+                Usage: ${parseInt(r.data.CurrentConsumptions.amount, 10)} on ${r.data.CurrentConsumptions.date},
+                Balance: ${parseInt(r.data.RemainingBalances.amount, 10)} on ${r.data.RemainingBalances.date}
                 `;
                 conv.ask(text);
             })
@@ -362,12 +366,29 @@ function execCommand(params: Parameters): Promise<IDeviceData | any> {
                 .then((r) => resolve(r))
                 .catch(() => reject());
         } else if (params.device === 'mobile') {
-            getApiResponse(https, config.mobileApi.options)
+            getMobileApiResponse()
                 .then((r) => resolve(r))
                 .catch(() => reject());
         } else {
             resolve();
         }
+    });
+}
+
+function getMobileApiResponse(): Promise<any> {
+    return new Promise((resolve, reject) => {
+        getApiResponse(https, config.mobileBalanceApi.options)
+            .then((b) => {
+                if (b.type === 'prepaid') {
+                    resolve(b);
+                } else {
+                    return Promise.all([b, getApiResponse(https, config.mobileUsageApi.options)]);
+                }
+            }).then(([b, u]: any) => {
+                b.balance = u.available_balance;
+                resolve(b);
+            })
+            .catch(() => reject());
     });
 }
 
@@ -420,3 +441,14 @@ function broadcastUDP(msg: string) {
     });
 
 }
+
+function initSchedulers() {
+    schedule.scheduleJob('0 10 * * *', () => {
+        getApiResponse(http, config.energyApi.options)
+        .then((r) => {
+            sendPush('Energy Status', `Remaining: ${r.data.RemainingBalances.amount} BDT`);
+        })
+    });
+}
+
+initSchedulers();
