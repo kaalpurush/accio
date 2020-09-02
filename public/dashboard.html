@@ -35,23 +35,25 @@
   <main class="flex-grow-1 py-4" role="main">
     <div class="container">
       <div class="row">
-        <div class="col-sm" @mouseenter.once="
+
+        <div class="col-lg-6">
+          <div class="card shadow mb-2" @mouseenter.once="
           fetch('/kommand?device=energy&state=status')
               .then(response => response.json())
               .then(json => { 
-                $refs.energy_usage.innerHTML = json.data.CurrentConsumption;
-                $refs.energy_balance.innerHTML = json.data.RemainingBalance;
+                $refs.energy_usage.innerHTML = parseInt(json.data.CurrentConsumptions.amount, 10)+' BDT on '+ json.data.CurrentConsumptions.date;
+                $refs.energy_balance.innerHTML = parseInt(json.data.RemainingBalances.amount, 10)+' BDT on '+ json.data.RemainingBalances.date;
               })
         ">
-          <div class="card" style="width: 18rem;">
             <div class="card-body">
               <h5 class="card-title">Electricity</h5>
               Usage: <span x-ref="energy_usage"></span><br />
               Balance: <span x-ref="energy_balance"></span><br />
             </div>
           </div>
-        </div>
-        <div class="col-sm" @mouseenter.once="
+
+
+          <div class="card shadow mb-2" @mouseenter.once="
           fetch('/kommand?device=mobile&state=status')
               .then(response => response.json())
               .then(json => { 
@@ -61,7 +63,6 @@
                 $refs.mobile_balance_sms.innerHTML = json.sms.value;
               })
         ">
-          <div class="card" style="width: 18rem;">
             <div class="card-body">
               <h5 class="card-title">Mobile</h5>
               Balance: <span x-ref="mobile_balance"></span> BDT<br />
@@ -71,22 +72,57 @@
             </div>
           </div>
         </div>
-        <div class="col-sm" @mouseenter.once="
-          fetch('/kommand?device=purifier&state=status')
-              .then(response => response.json())
-              .then(json => { 
-                $refs.purifier_state.innerHTML = json.state;
-              })
-        ">
-          <div class="card" style="width: 18rem;">
+        <div class="col-lg-6">
+          <div class="card shadow mb-2" x-data="{ open: false, init: false }" x-init="
+          $watch('open', value =>{
+            if(init){
+              fetch('/kommand?device=purifier&state='+(value?'on':'off'));
+            }
+          });
+          " @mouseenter.once="
+            fetch('/kommand?device=purifier&state=status')
+                .then(response => {
+                  if (!response.ok) {
+                    throw Error(response.statusText);
+                  }
+                  return response.json()
+                })
+                .then(json => { 
+                  open=json.status;
+                  init=true;
+                  //$refs.purifier_status.innerHTML = json.status?'On' : 'Off';
+                  $refs.purifier_temperature.innerHTML = json.temperature.toFixed()+'°C';
+                  $refs.purifier_humidity.innerHTML = json.humidity+'%';
+                  $refs.purifier_pm2_5.innerHTML = json.pm2_5;
+                })
+                .catch((e)=>{
+                    console.error('api failed!');
+                });
+          ">
             <div class="card-body">
               <h5 class="card-title">Purifier</h5>
-              State: <span x-ref="purifier_state"></span><br />
+              Status:
+              <div class="form-check">
+                <input x-model="open" class="form-check-input" type="checkbox">
+                <label class="form-check-label" x-text="open?'On':'Off'"></label>
+              </div>
+              Room Temperature: <span x-ref="purifier_temperature"></span><br />
+              Room Humidity: <span x-ref="purifier_humidity"></span><br />
+              Room Air Quality (PM2.5): <span x-ref="purifier_pm2_5"></span><br />
+            </div>
+          </div>
+
+          <div class="card shadow mb-2">
+            <div class="card-body">
+              <h5 class="card-title">Air Condition</h5>
+              <div class="btn-group">
+                <button class="btn btn-outline-success btn-sm">Turn On</button>
+                <button class="btn btn-outline-danger btn-sm">Turn Off</button>
+              </div><br />
+              Temp (20-30): <input class="border-0" type="range" min="20" max="30" value="30" />
             </div>
           </div>
         </div>
-      </div>
-    </div>
   </main>
 
   <footer>

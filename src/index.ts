@@ -9,7 +9,7 @@ import * as dgram from 'dgram';
 const exec = child_process.exec;
 import { GoogleHomeNotifier } from '@shooontan/google-home-notifier';
 import miio = require('miio');
-import schedule = require('node-schedule');
+import * as schedule from 'node-schedule';
 
 import config from './config';
 
@@ -88,7 +88,7 @@ app.get('/kommand', (req: express.Request, res: express.Response) => {
         execCommand(params)
             .then((r) => res.json(r ? r : SUCCESS_JSON))
             .catch((e) => {
-                res.json({ code: 400, message: 'error!', error: e });
+                res.status(500).json({ code: 500, message: 'error!', error: e });
             });
     } else {
         res.status(404).end();
@@ -140,10 +140,10 @@ httpsServer.listen(app.get('port'), () => {
     console.log('https server started on port', app.get('port'));
 });
 
-const httpServer = http.createServer(app);
+/* const httpServer = http.createServer(app);
 httpServer.listen(80, () => {
     console.log('http server started on port', 80);
-});
+}); */
 
 function assignPushTokenToTopic(token: string, topic: string) {
     const options = {
@@ -159,9 +159,7 @@ function assignPushTokenToTopic(token: string, topic: string) {
 
     const req = https.request(options, (res) => {
         console.log(`assignToTopic:statusCode: ${res.statusCode}`);
-    });
-
-    req.on('error', (error) => {
+    }).on('error', (error) => {
         console.error(error);
     });
 
@@ -169,40 +167,43 @@ function assignPushTokenToTopic(token: string, topic: string) {
     req.end();
 }
 
-function sendPush(title: string, body: string, collapse_key: string = 'kommand') {
-    const options = {
-        hostname: 'fcm.googleapis.com',
-        port: 443,
-        path: '/fcm/send',
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': config.firebaseServerKey
-        }
-    };
+function sendPush(title: string, body: string, collapse_key: string = 'kommand'): Promise<void> {
+    return new Promise((resolve, reject) => {
 
-    const req = https.request(options, (res) => {
-        console.log(`sendPush:statusCode: ${res.statusCode}`);
+        const options = {
+            hostname: 'fcm.googleapis.com',
+            port: 443,
+            path: '/fcm/send',
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': config.firebaseServerKey
+            }
+        };
+
+        const jsonBody = {
+            to: '/topics/kommand',
+            notification: {
+                title,
+                body,
+                icon: 'https://image.flaticon.com/icons/png/128/2004/2004705.png',
+                click_action: config.baseUrl
+            },
+            collapse_key,
+            time_to_live: 300
+        };
+
+        const req = https.request(options, (res) => {
+            console.log(`sendPush:statusCode: ${res.statusCode}`);
+            resolve();
+        }).on('error', (error) => {
+            console.error(error);
+            reject();
+        });
+
+        req.write(JSON.stringify(jsonBody));
+        req.end();
     });
-
-    req.on('error', (error) => {
-        console.error(error);
-    });
-
-    const jsonBody = {
-        to: '/topics/kommand',
-        notification: {
-            title,
-            body,
-            icon: 'https://image.flaticon.com/icons/png/128/2004/2004705.png',
-            click_action: config.baseUrl
-        },
-        collapse_key,
-        time_to_live: 300
-    };
-
-    req.write(JSON.stringify(jsonBody));
-    req.end();
 }
 
 interface IDeviceData {
@@ -234,24 +235,6 @@ function getAirStatus() {
     });
 }
 
-function getApiResponse(client, options): Promise<any> {
-    return new Promise((resolve, reject) => {
-        client.get(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-            res.on('end', () => {
-                resolve(JSON.parse(data));
-            });
-
-        }).on('error', (error) => {
-            console.error(error);
-            reject();
-        });
-    });
-}
-
 function addAirEventHandler(device: any) {
     if (airDevice == null) {
         airDevice = device;
@@ -263,7 +246,6 @@ function addAirEventHandler(device: any) {
         });
     }
 }
-
 
 function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
     if (conv.parameters.device === 'purifier' && conv.parameters.state === 'status') {
@@ -330,14 +312,14 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
 
 function broadcastCommand(params: Parameters) {
     const command = `${params.location} ${params.device} ${params.state}`;
-    sendPush('Kommand', command);
+    // sendPush('Kommand', command);
     broadcastUDP(command);
 }
 
 function execCommand(params: Parameters): Promise<IDeviceData | any> {
     return new Promise<IDeviceData | any>((resolve, reject) => {
 
-        // broadcastCommand(params);
+        broadcastCommand(params);
 
         if (params.device === 'tv' && params.state === 'off') {
             const cmd = 'sh ' + __dirname + '/shield-shutdown.sh';
@@ -372,6 +354,25 @@ function execCommand(params: Parameters): Promise<IDeviceData | any> {
         } else {
             resolve();
         }
+    });
+}
+
+
+function getApiResponse(client, options): Promise<any> {
+    return new Promise((resolve, reject) => {
+        client.get(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            res.on('end', () => {
+                resolve(JSON.parse(data));
+            });
+
+        }).on('error', (error) => {
+            console.error(error);
+            reject();
+        });
     });
 }
 
@@ -426,28 +427,38 @@ function castURL(url: string): Promise<void> {
     });
 }
 
-function broadcastUDP(msg: string) {
-    const message = new Buffer(msg);
+function broadcastUDP(msg: string): Promise<void> {
+    return new Promise((resolve, reject) => {
 
-    const client = dgram.createSocket('udp4');
-    client.bind();
-    client.on('listening', () => {
-        client.setBroadcast(true);
-        client.send(message, 0, message.length, config.udp.port, config.udp.ip, (err) => {
-            if (err) { throw err; }
-            console.log('UDP message sent to ' + config.udp.ip + ':' + config.udp.port);
-            client.close();
+        const message = new Buffer(msg);
+
+        const client = dgram.createSocket('udp4');
+        client.bind();
+        client.on('listening', () => {
+            client.setBroadcast(true);
+            client.send(message, 0, message.length, config.udp.port, config.udp.ip, (err) => {
+                if (err) { return reject(); }
+                console.log('UDP message sent to ' + config.udp.ip + ':' + config.udp.port);
+                client.close();
+                resolve();
+            });
         });
     });
-
 }
 
 function initSchedulers() {
     schedule.scheduleJob('0 10 * * *', () => {
         getApiResponse(http, config.energyApi.options)
-        .then((r) => {
-            sendPush('Energy Status', `Remaining: ${r.data.RemainingBalances.amount} BDT`);
-        })
+            .then((r) => {
+                return sendPush('Energy Status',
+                    `Remaining: ${r.data.RemainingBalances.amount} BDT`);
+            })
+            .then(() => {
+                console.log('Job Success!');
+            })
+            .catch(() => {
+                console.log('Job Failed!');
+            });
     });
 }
 
