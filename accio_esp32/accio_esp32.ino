@@ -252,15 +252,17 @@ void loop()
   if (sensorState == 1)
   {
     sensorState = 0;
-    sendNotifyEvent("/motion?id=0");
+    char url[100];
+    sprintf(url, "/motion?id=%s", DEVICE_ID);
+    sendNotifyEvent(url);
   }
 
   static uint32_t lastMillis = 0;
-  if (millis() - lastMillis > 5000) {
+  if (millis() - lastMillis > 5000)
+  {
     lastMillis = millis();
     dht.read();
     delay(500);
     dht.read();
   }
-
 }

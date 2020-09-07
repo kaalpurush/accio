@@ -38,37 +38,31 @@
 
         <div class="col-lg-6">
           <div class="card shadow mb-2" @mouseenter.once="
-          fetch('/kommand?device=energy&state=status')
-              .then(response => response.json())
-              .then(json => { 
-                $refs.energy_usage.innerHTML = parseInt(json.data.CurrentConsumptions.amount, 10)+' BDT on '+ json.data.CurrentConsumptions.date;
-                $refs.energy_balance.innerHTML = parseInt(json.data.RemainingBalances.amount, 10)+' BDT on '+ json.data.RemainingBalances.date;
-              })
-        ">
+            let json = await executeKommand('energy','status');
+            $refs.energy_usage.innerHTML = parseInt(json.data.CurrentConsumptions.amount, 10)+' BDT on '+ json.data.CurrentConsumptions.date;
+            $refs.energy_balance.innerHTML = parseInt(json.data.RemainingBalances.amount, 10)+' BDT on '+ json.data.RemainingBalances.date;              
+          ">
             <div class="card-body">
               <h5 class="card-title">Electricity</h5>
-              Usage: <span x-ref="energy_usage"></span><br />
-              Balance: <span x-ref="energy_balance"></span><br />
+              <span class="font-weight-bold">Usage: </span><span x-ref="energy_usage"></span><br />
+              <span class="font-weight-bold">Balance: </span><span x-ref="energy_balance"></span><br />
             </div>
           </div>
 
-
-          <div class="card shadow mb-2" @mouseenter.once="
-          fetch('/kommand?device=mobile&state=status')
-              .then(response => response.json())
-              .then(json => { 
-                $refs.mobile_balance.innerHTML = json.balance;
-                $refs.mobile_balance_internet.innerHTML = json.internet.value;
-                $refs.mobile_balance_voice.innerHTML = json.voice.value;
-                $refs.mobile_balance_sms.innerHTML = json.sms.value;
-              })
-        ">
+          <div class="card shadow mb-2" x-data="mobileBalance()" @mouseenter.once="fetchMobileBalance()">
             <div class="card-body">
               <h5 class="card-title">Mobile</h5>
-              Balance: <span x-ref="mobile_balance"></span> BDT<br />
-              Internet: <span x-ref="mobile_balance_internet"></span><br />
-              Voice: <span x-ref="mobile_balance_voice"></span><br />
-              SMS: <span x-ref="mobile_balance_sms"></span><br />
+              <span class="font-weight-bold">Balance: </span><span x-text="balance.balance"></span> BDT<br />
+              <span class="font-weight-bold">Internet: </span><span x-text="balance.internet.value"></span><br />
+              <span class="font-weight-bold">Voice: </span><span x-text="balance.voice.value"></span><br />
+              <span class="font-weight-bold">SMS: </span><span x-text="balance.sms.value"></span><br />
+              <br />
+              <ul class="list-group">
+                <template x-for="(item, index) in internet_packs" :key="index">
+                  <li class="list-group-item"><span class="font-weight-bold" x-text="item.name"></span>: <span x-text="item.value"></span> (<span
+                      x-text="item.remaining"></span>)</li>
+                </template>
+              </ul>
             </div>
           </div>
         </div>
@@ -76,50 +70,45 @@
           <div class="card shadow mb-2" x-data="{ open: false, init: false }" x-init="
           $watch('open', value =>{
             if(init){
-              fetch('/kommand?device=purifier&state='+(value?'on':'off'));
+              executeKommand('purifier', value?'on':'off');
             }
           });
           " @mouseenter.once="
-            fetch('/kommand?device=purifier&state=status')
-                .then(response => {
-                  if (!response.ok) {
-                    throw Error(response.statusText);
-                  }
-                  return response.json()
-                })
-                .then(json => { 
-                  open=json.status;
-                  init=true;
-                  //$refs.purifier_status.innerHTML = json.status?'On' : 'Off';
-                  $refs.purifier_temperature.innerHTML = json.temperature.toFixed()+'°C';
-                  $refs.purifier_humidity.innerHTML = json.humidity+'%';
-                  $refs.purifier_pm2_5.innerHTML = json.pm2_5;
-                })
-                .catch((e)=>{
-                    console.error('api failed!');
-                });
+            try{
+              let json = await executeKommand('purifier','status');
+              open=json.status;
+              init=true;
+              //$refs.purifier_status.innerHTML = json.status?'On' : 'Off';
+              $refs.purifier_temperature.innerHTML = json.temperature.toFixed()+'°C';
+              $refs.purifier_humidity.innerHTML = json.humidity+'%';
+              $refs.purifier_pm2_5.innerHTML = json.pm2_5;
+            }catch(e){
+              console.error('api failed!');
+            }
           ">
             <div class="card-body">
               <h5 class="card-title">Purifier</h5>
-              Status:
+              <span class="font-weight-bold">Status:</span>
               <div class="form-check">
                 <input x-model="open" class="form-check-input" type="checkbox">
                 <label class="form-check-label" x-text="open?'On':'Off'"></label>
               </div>
-              Room Temperature: <span x-ref="purifier_temperature"></span><br />
-              Room Humidity: <span x-ref="purifier_humidity"></span><br />
-              Room Air Quality (PM2.5): <span x-ref="purifier_pm2_5"></span><br />
+              <span class="font-weight-bold">Room Temperature: </span><span x-ref="purifier_temperature"></span><br />
+              <span class="font-weight-bold">Room Humidity: </span><span x-ref="purifier_humidity"></span><br />
+              <span class="font-weight-bold">Room Air Quality (PM2.5): </span><span x-ref="purifier_pm2_5"></span><br />
             </div>
           </div>
 
-          <div class="card shadow mb-2">
+          <div class="card shadow mb-2" x-data="{temp:30}">
             <div class="card-body">
               <h5 class="card-title">Air Condition</h5>
               <div class="btn-group">
-                <button class="btn btn-outline-success btn-sm">Turn On</button>
-                <button class="btn btn-outline-danger btn-sm">Turn Off</button>
-              </div><br />
-              Temp (20-30): <input class="border-0" type="range" min="20" max="30" value="30" />
+                <button class="btn btn-outline-success btn-sm" @click="executeKommand('cooler','on');">Turn On</button>
+                <button class="btn btn-outline-danger btn-sm" @click="executeKommand('cooler','off');">Turn Off</button>
+              </div><br /><br />
+              <span class="font-weight-bold">Temp (20-30): </span><span x-text="temp"></span><br /><input type="range"
+                class="form-control-range" x-ref="temp" x-model="temp" min="20" max="30" value="30"
+                @change="executeKommand('cooler', $refs.temp.value);" />
             </div>
           </div>
         </div>
@@ -135,7 +124,27 @@
 
   <!-- Scripts -->
   <script type="text/javascript">
+    async function executeKommand(device, state) {
+      let response = await fetch(`/kommand?device=${device}&state=${state}`);
+      if (!response.ok) {
+        throw Error(response.statusText);
+      }
+      let data = await response.json()
+      return data;
+    }
 
+    function mobileBalance() {
+      return {
+        internet_packs: [],
+        balance: {},
+        async fetchMobileBalance() {
+          let json = await executeKommand('mobile', 'status');
+          this.balance = json;
+          this.internet_packs = json.internet_packs;
+          console.log(json.internet_packs);
+        }
+      }
+    }
   </script>
 
 </body>

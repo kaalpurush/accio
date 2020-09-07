@@ -14,6 +14,7 @@ import * as schedule from 'node-schedule';
 import config from './config';
 
 let airDevice: any;
+let motionSensor = false;
 
 const SUCCESS_MSG = 'Done sir!';
 const FAIL_MSG = 'Sorry, failed!';
@@ -48,12 +49,19 @@ app.get('/', (req: express.Request, res: express.Response) => {
 app.post('/webhook', assistant);
 
 app.get('/motion', (req: express.Request, res: express.Response) => {
+    // console.log('motion detected!');
+    if (!motionSensor) {
+        return res.json({ code: 400, message: 'sensor disabled!' });
+    }
+
     if (req.query.id) {
-        const devices = ['lab room'];
+        const devices = config.motionSensorName;
         const id = req.query.id;
         if (devices[id] !== undefined) {
             castMessage('motion in ' + devices[id])
                 .then(() => {
+                    return sendPush('Motion Trigger', 'motion in ' + devices[id]);
+                }).then(() => {
                     res.json(SUCCESS_JSON);
                 }).catch(() => {
                     res.json({ code: 400, message: 'network error!' });
@@ -140,10 +148,10 @@ httpsServer.listen(app.get('port'), () => {
     console.log('https server started on port', app.get('port'));
 });
 
-/* const httpServer = http.createServer(app);
+const httpServer = http.createServer(app);
 httpServer.listen(80, () => {
     console.log('http server started on port', 80);
-}); */
+});
 
 function assignPushTokenToTopic(token: string, topic: string) {
     const options = {
@@ -184,10 +192,10 @@ function sendPush(title: string, body: string, collapse_key: string = 'kommand')
         const jsonBody = {
             to: '/topics/kommand',
             notification: {
-                title,
+                title: title + ' - ' + config.appName,
                 body,
                 icon: 'https://image.flaticon.com/icons/png/128/2004/2004705.png',
-                click_action: config.baseUrl
+                click_action: config.baseUrl + '/dash'
             },
             collapse_key,
             time_to_live: 300
@@ -242,7 +250,7 @@ function addAirEventHandler(device: any) {
         //     sendPush('Kommand', 'Purifier State: ' + (power === true ? 'On' : 'Off'));
         // });
         airDevice.on('pm2.5Changed', (pm2_5: number) => {
-            sendPush('Kommand', 'Purifier PM2.5: ' + pm2_5, 'purifier');
+            sendPush('Purifier Status', 'PM2.5: ' + pm2_5, 'purifier');
         });
     }
 }
@@ -343,6 +351,9 @@ function execCommand(params: Parameters): Promise<IDeviceData | any> {
                     .then(() => resolve())
                     .catch(() => reject());
             }
+        } else if (params.device === 'motion') {
+            motionSensor = params.state === 'on';
+            resolve();
         } else if (params.device === 'energy') {
             getApiResponse(http, config.energyApi.options)
                 .then((r) => resolve(r))
@@ -400,7 +411,7 @@ function castMessage(msg: string): Promise<void> {
             return resolve();
         }
 
-        const notifier = new GoogleHomeNotifier(config.google_home_device);
+        const notifier = new GoogleHomeNotifier(config.googleHome);
         notifier.say(msg)
             .then(() => {
                 resolve();
@@ -417,7 +428,7 @@ function castURL(url: string): Promise<void> {
             return resolve();
         }
 
-        const notifier = new GoogleHomeNotifier(config.google_home_device);
+        const notifier = new GoogleHomeNotifier(config.googleHome);
         notifier.play(url)
             .then(() => {
                 resolve();
@@ -462,4 +473,9 @@ function initSchedulers() {
     });
 }
 
-initSchedulers();
+function init() {
+    motionSensor = config.motionSensor;
+    initSchedulers();
+}
+
+init();
