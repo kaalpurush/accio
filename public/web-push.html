@@ -1,67 +1,140 @@
-<!-- The core Firebase JS SDK is always required and must be listed first -->
-<script src="https://www.gstatic.com/firebasejs/7.14.2/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/7.14.2/firebase-messaging.js"></script>
-<script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.x.x/dist/alpine.min.js"></script>
+<!DOCTYPE html>
+<html lang="en">
 
-<!-- TODO: Add SDKs for Firebase products that you want to use
-     https://firebase.google.com/docs/web/setup#available-libraries -->
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<script>
-  // Your web app's Firebase configuration
-  var firebaseConfig = {
-    apiKey: "AIzaSyB6VKTeRhrPbHN66WejEpoUdJQbmMxKsHM",
-    authDomain: "kaal.firebaseapp.com",
-    databaseURL: "https://kaal.firebaseio.com",
-    projectId: "firebase-kaal",
-    storageBucket: "firebase-kaal.appspot.com",
-    messagingSenderId: "487227687849",
-    appId: "1:487227687849:web:c0a47f44bb147e3d287ab8"
-  };
-  // Initialize Firebase
-  firebase.initializeApp(firebaseConfig);
+  <title>ACCIO</title>
+  <!-- Styles -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" />
 
-  async function requestPermission() {
-    try {
-      const messaging = firebase.messaging();
-      await messaging.requestPermission();
-      const token = await messaging.getToken();
-      return token;
-    } catch (e) {
+  <!-- JS -->
+  <script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.x.x/dist/alpine.min.js"></script>
+
+  <!-- The core Firebase JS SDK is always required and must be listed first -->
+  <script src="https://www.gstatic.com/firebasejs/7.14.2/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/7.14.2/firebase-messaging.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.x.x/dist/alpine.min.js"></script>
+</head>
+
+<body class="d-flex flex-column min-vh-100" x-data="{}">
+
+  <header>
+    <nav class="navbar navbar-expand-sm navbar-light bg-light">
+      <a class="navbar-brand">ACCIO</a>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav">
+          <li class="nav-item">
+            <a class="nav-link" href="/dash"><i class="fa fa-fw fa-home"></i>Home</a>
+          </li>
+          <li class="nav-item active">
+            <a class="nav-link" href="/web-push"><i class="fa fa-fw fa-paper-plane"></i>Push</a>
+          </li>
+        </ul>
+      </div>
+    </nav>
+  </header>
+
+  <main class="flex-grow-1 py-4" role="main">
+    <div class="container">
+      <div class="row">
+
+        <div class="col-lg-6">
+          <div x-data="pushStatus()" x-init="tryRegisterPush()">
+            <div>Notification permission: <strong x-text="Notification.permission"></strong></div>
+            <div>Notification registration: <strong x-text="permitted"></strong></div>
+            <div> Browser: <strong x-text="navigator.appName"></strong> </div>
+            <div> Platform: <strong x-text="navigator.platform"></strong> </div>
+          </div>
+        </div>
+      </div>
+  </main>
+
+  <footer>
+    <hr />
+    <div class="container pb-2">
+      &copy; <span x-text="new Date().getFullYear()"></span> Kaal Purush.</a>
+    </div>
+  </footer>
+
+
+  <!-- Scripts -->
+  <script type="text/javascript">
+    // Your web app's Firebase configuration
+    var firebaseConfig = {
+      apiKey: "AIzaSyB6VKTeRhrPbHN66WejEpoUdJQbmMxKsHM",
+      authDomain: "kaal.firebaseapp.com",
+      databaseURL: "https://kaal.firebaseio.com",
+      projectId: "firebase-kaal",
+      storageBucket: "firebase-kaal.appspot.com",
+      messagingSenderId: "487227687849",
+      appId: "1:487227687849:web:c0a47f44bb147e3d287ab8"
+    };
+    // Initialize Firebase
+    firebase.initializeApp(firebaseConfig);
+
+    async function requestPushToken() {
+      try {
+        const messaging = firebase.messaging();
+        await messaging.requestPermission();
+        const token = await messaging.getToken();
+        return token;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async function registerPush() {
+      if (Notification.permission === 'granted') {
+        return true;
+      }
+      let token = await requestPushToken();
+      if (token) {
+        let pushRegistartion = await sendPushToken({ token: token });
+        return pushRegistartion;
+      }
       return false;
     }
-  }
 
-  async function registerPush() {
-    let token = await requestPermission();
-    if (token) {
-      sendPushToken({ token: token });
+    async function sendPushToken(data) {
+      try {
+        let response = await fetch(location.href, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(data),
+        });
+
+        if (response.ok) {
+          let json = await response.json();
+          console.log('Success:', json);
+          return true;
+        } else {          
+          return false
+        }
+      } catch (e) {
+        return false;
+      }
     }
-  }
 
-  function sendPushToken(data) {
-    fetch(location.href, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
-    })
-      .then(response => response.json())
-      .then(data => {
-        console.log('Success:', data);
-      })
-      .catch((error) => {
-        console.error('Error:', error);
-      });
-  }
+    // (async () => {
+    //   registerPush();
+    // })();
 
-  (async () => {
-    registerPush();
-  })();
+    function pushStatus() {
+      return {
+        permitted: false,
+        async tryRegisterPush() {
+          this.permitted = await registerPush();
+        }
+      }
+    }
+  </script>
 
-</script>
-<div x-data="{}">
-  <div>Notification permission: <strong x-text="Notification.permission"></strong></div>
-  <div> Browser: <strong x-text="navigator.appName"></strong> </div>
-  <div> Platform: <strong x-text="navigator.platform"></strong> </div>
-</div>
+</body>
+
+</html>
