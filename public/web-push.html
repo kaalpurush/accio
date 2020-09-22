@@ -41,13 +41,16 @@
   <main class="flex-grow-1 py-4" role="main">
     <div class="container">
       <div class="row">
-
         <div class="col-lg-6">
-          <div x-data="pushStatus()" x-init="tryRegisterPush()">
-            <div>Notification permission: <strong x-text="Notification.permission"></strong></div>
-            <div>Notification registration: <strong x-text="permitted"></strong></div>
-            <div> Browser: <strong x-text="navigator.appName"></strong> </div>
-            <div> Platform: <strong x-text="navigator.platform"></strong> </div>
+          <div class="card shadow mb-2">
+            <div class="card-body">
+              <div x-data="pushStatus()" x-init="tryRegisterPush()">
+                <div>Notification permission: <strong x-text="Notification.permission"></strong></div>
+                <div>Notification registration: <strong x-text="permitted"></strong></div>
+                <div> Browser: <strong x-text="navigator.appName"></strong> </div>
+                <div> Platform: <strong x-text="navigator.platform"></strong> </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -59,7 +62,6 @@
       &copy; <span x-text="new Date().getFullYear()"></span> Kaal Purush.</a>
     </div>
   </footer>
-
 
   <!-- Scripts -->
   <script type="text/javascript">
@@ -106,14 +108,14 @@
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify(data)
         });
 
         if (response.ok) {
           let json = await response.json();
-          console.log('Success:', json);
+          console.log('Registration:', json);
           return true;
-        } else {          
+        } else {
           return false
         }
       } catch (e) {

@@ -10,7 +10,7 @@
   <!-- Styles -->
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" />
   <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" />
-  
+
 
   <!-- JS -->
   <script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.x.x/dist/alpine.min.js"></script>
@@ -113,6 +113,16 @@
               <span class="font-weight-bold">Temp (20-30): </span><span x-text="temp"></span><br /><input type="range"
                 class="form-control-range" x-ref="temp" x-model="temp" min="20" max="30" value="30"
                 @change="executeKommand('cooler', $refs.temp.value);" />
+            </div>
+          </div>
+
+          <div class="card shadow mb-2" x-data="{}">
+            <div class="card-body">
+              <h5 class="card-title"></i><i class="fa fa-fw fa-toggle-on"></i>Motion Sensor</h5>
+              <div class="btn-group">
+                <button class="btn btn-outline-success btn-sm" @click="executeKommand('motion','on');">Turn On</button>
+                <button class="btn btn-outline-danger btn-sm" @click="executeKommand('motion','off');">Turn Off</button>
+              </div>
             </div>
           </div>
         </div>

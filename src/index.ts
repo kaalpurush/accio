@@ -320,7 +320,9 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
 
 function broadcastCommand(params: Parameters) {
     const command = `${params.location} ${params.device} ${params.state}`;
-    // sendPush('Kommand', command);
+    if (params.state !== 'status') {
+        sendPush('Kommand', command);
+    }
     broadcastUDP(command);
 }
 
