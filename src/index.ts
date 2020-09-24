@@ -13,6 +13,9 @@ import * as schedule from 'node-schedule';
 
 import config from './config';
 
+import { Push } from './push';
+import * as request from './request';
+
 let airDevice: any;
 let motionSensor = false;
 
@@ -20,6 +23,7 @@ const SUCCESS_MSG = 'Done sir!';
 const FAIL_MSG = 'Sorry, failed!';
 const ANYTHING_ELSE_MSG = 'Anything else, sir?';
 const SUCCESS_JSON = { code: 200, message: 'success' };
+const FAIL_JSON = { code: 500, message: 'error' };
 
 const assistant = dialogflow();
 
@@ -60,7 +64,7 @@ app.get('/motion', (req: express.Request, res: express.Response) => {
         if (devices[id] !== undefined) {
             castMessage('motion in ' + devices[id])
                 .then(() => {
-                    return sendPush('Motion Trigger', 'motion in ' + devices[id]);
+                    return new Push(config).send('Motion Trigger', 'motion in ' + devices[id]);
                 }).then(() => {
                     res.json(SUCCESS_JSON);
                 }).catch(() => {
@@ -74,7 +78,6 @@ app.get('/motion', (req: express.Request, res: express.Response) => {
         res.json({ code: 400, message: 'param missing!' });
     }
 });
-
 
 app.get('/weather', (req: express.Request, res: express.Response) => {
     if (req.query.t && req.query.h) {
@@ -133,8 +136,12 @@ app.get('/web-push', (req: express.Request, res: express.Response) => {
 });
 
 app.post('/web-push', (req: express.Request, res: express.Response) => {
-    assignPushTokenToTopic(req.body.token, 'kommand');
-    res.json(SUCCESS_JSON);
+    new Push(config).assignTokenToTopic(req.body.token, 'kommand')
+        .then((r) => {
+            res.json(SUCCESS_JSON);
+        }).catch((e) => {
+            res.status(500).json(FAIL_JSON);
+        });
 });
 
 app.get('/dash', (req: express.Request, res: express.Response) => {
@@ -152,67 +159,6 @@ const httpServer = http.createServer(app);
 httpServer.listen(80, () => {
     console.log('http server started on port', 80);
 });
-
-function assignPushTokenToTopic(token: string, topic: string) {
-    const options = {
-        hostname: 'iid.googleapis.com',
-        port: 443,
-        path: '/iid/v1/' + token + '/rel/topics/' + topic,
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Authorization': config.firebaseServerKey
-        }
-    };
-
-    const req = https.request(options, (res) => {
-        console.log(`assignToTopic:statusCode: ${res.statusCode}`);
-    }).on('error', (error) => {
-        console.error(error);
-    });
-
-    req.write('');
-    req.end();
-}
-
-function sendPush(title: string, body: string, collapse_key: string = 'kommand'): Promise<void> {
-    return new Promise((resolve, reject) => {
-
-        const options = {
-            hostname: 'fcm.googleapis.com',
-            port: 443,
-            path: '/fcm/send',
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': config.firebaseServerKey
-            }
-        };
-
-        const jsonBody = {
-            to: '/topics/kommand',
-            notification: {
-                title: title + ' - ' + config.appName,
-                body,
-                icon: 'https://image.flaticon.com/icons/png/128/2004/2004705.png',
-                click_action: config.baseUrl + '/dash'
-            },
-            collapse_key,
-            time_to_live: 300
-        };
-
-        const req = https.request(options, (res) => {
-            console.log(`sendPush:statusCode: ${res.statusCode}`);
-            resolve();
-        }).on('error', (error) => {
-            console.error(error);
-            reject();
-        });
-
-        req.write(JSON.stringify(jsonBody));
-        req.end();
-    });
-}
 
 interface IDeviceData {
     status: boolean;
@@ -250,7 +196,7 @@ function addAirEventHandler(device: any) {
         //     sendPush('Kommand', 'Purifier State: ' + (power === true ? 'On' : 'Off'));
         // });
         airDevice.on('pm2.5Changed', (pm2_5: number) => {
-            sendPush('Purifier Status', 'PM2.5: ' + pm2_5, 'purifier');
+            new Push(config).send('Purifier Status', 'PM2.5: ' + pm2_5, 'purifier');
         });
     }
 }
@@ -321,7 +267,7 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
 function broadcastCommand(params: Parameters) {
     const command = `${params.location} ${params.device} ${params.state}`;
     if (params.state !== 'status') {
-        sendPush('Kommand', command);
+        new Push(config).send('Kommand', command);
     }
     broadcastUDP(command);
 }
@@ -357,7 +303,7 @@ function execCommand(params: Parameters): Promise<IDeviceData | any> {
             motionSensor = params.state === 'on';
             resolve();
         } else if (params.device === 'energy') {
-            getApiResponse(http, config.energyApi.options)
+            request.callApi(http, config.energyApi.options)
                 .then((r) => resolve(r))
                 .catch(() => reject());
         } else if (params.device === 'mobile') {
@@ -370,33 +316,14 @@ function execCommand(params: Parameters): Promise<IDeviceData | any> {
     });
 }
 
-
-function getApiResponse(client, options): Promise<any> {
-    return new Promise((resolve, reject) => {
-        client.get(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-            res.on('end', () => {
-                resolve(JSON.parse(data));
-            });
-
-        }).on('error', (error) => {
-            console.error(error);
-            reject();
-        });
-    });
-}
-
 function getMobileApiResponse(): Promise<any> {
     return new Promise((resolve, reject) => {
-        getApiResponse(https, config.mobileBalanceApi.options)
+        request.callApi(https, config.mobileBalanceApi.options)
             .then((b) => {
                 if (b.type === 'prepaid') {
                     resolve(b);
                 } else {
-                    return Promise.all([b, getApiResponse(https, config.mobileUsageApi.options)]);
+                    return Promise.all([b, request.callApi(https, config.mobileUsageApi.options)]);
                 }
             }).then(([b, u]: any) => {
                 b.balance = u.available_balance;
@@ -461,9 +388,9 @@ function broadcastUDP(msg: string): Promise<void> {
 
 function initSchedulers() {
     schedule.scheduleJob('0 10 * * *', () => {
-        getApiResponse(http, config.energyApi.options)
+        request.callApi(http, config.energyApi.options)
             .then((r) => {
-                return sendPush('Energy Status',
+                return new Push(config).send('Energy Status',
                     `Remaining: ${r.data.RemainingBalances.amount} BDT`);
             })
             .then(() => {
