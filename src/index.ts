@@ -5,9 +5,7 @@ import * as https from 'https';
 import * as bodyParser from 'body-parser';
 import { dialogflow, Parameters, DialogflowConversation, BasicCard, SimpleResponse } from 'actions-on-google';
 import * as child_process from 'child_process';
-import * as dgram from 'dgram';
 const exec = child_process.exec;
-import { GoogleHomeNotifier } from '@shooontan/google-home-notifier';
 import miio = require('miio');
 import * as schedule from 'node-schedule';
 
@@ -15,6 +13,10 @@ import config from './config';
 
 import { Push } from './push';
 import * as request from './request';
+import { IDeviceData } from './idevicedata';
+import { Udp } from './udp';
+import { Cast } from './cast';
+import * as tools from './tools';
 
 let airDevice: any;
 let motionSensor = false;
@@ -62,7 +64,7 @@ app.get('/motion', (req: express.Request, res: express.Response) => {
         const devices = config.motionSensorName;
         const id = req.query.id;
         if (devices[id] !== undefined) {
-            castMessage('motion in ' + devices[id])
+            new Cast(config.googleHome).sendMessage('motion in ' + devices[id])
                 .then(() => {
                     return new Push(config).send('Motion Trigger', 'motion in ' + devices[id]);
                 }).then(() => {
@@ -81,7 +83,7 @@ app.get('/motion', (req: express.Request, res: express.Response) => {
 
 app.get('/weather', (req: express.Request, res: express.Response) => {
     if (req.query.t && req.query.h) {
-        castMessage('temparature: ' + req.query.t + ' degree celcius, humidity: ' + req.query.h + '%')
+        new Cast(config.googleHome).sendMessage('temparature: ' + req.query.t + ' degree celcius, humidity: ' + req.query.h + '%')
             .then(() => {
                 res.json(SUCCESS_JSON);
             }).catch(() => {
@@ -112,14 +114,14 @@ app.all('/broadcast', (req: express.Request, res: express.Response) => {
     const url = req.query.url ? req.query.url : req.body.url;
 
     if (msg) {
-        castMessage(msg)
+        new Cast(config.googleHome).sendMessage(msg)
             .then(() => {
                 res.json(SUCCESS_JSON);
             }).catch(() => {
                 res.json({ code: 400, message: 'network error!' });
             });
     } else if (url) {
-        castURL(url)
+        new Cast(config.googleHome).sendURL(url)
             .then(() => {
                 res.json(SUCCESS_JSON);
             }).catch(() => {
@@ -160,13 +162,6 @@ httpServer.listen(80, () => {
     console.log('http server started on port', 80);
 });
 
-interface IDeviceData {
-    status: boolean;
-    temperature: number;
-    humidity: number;
-    pm2_5: number;
-}
-
 function getAirStatus() {
     return new Promise<IDeviceData>((resolve, reject) => {
         miio
@@ -183,7 +178,12 @@ function getAirStatus() {
                 );
             })
             .then(([s, t, h, p]) => {
-                resolve({ status: s, temperature: t.celsius, humidity: h, pm2_5: p });
+                resolve({
+                    status: s, temperature: t.celsius, humidity: h, pm2_5: p,
+                    heat_index: tools.convertToCelsius(
+                        tools.calculateHI(
+                            tools.convertToFahrenheit(t.celsius), h))
+                });
             })
             .catch((err: any) => reject(err));
     });
@@ -208,6 +208,7 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
                 const text = `
                 Temparature: ${r.temperature.toFixed(1)} °C
                 Humidity: ${r.humidity}%
+                Heat Index: ${r.heat_index.toFixed(1)} °C
                 Air Quality: ${r.pm2_5}
                 Air Purifier: ${r.status === true ? 'On' : 'Off'}
                 `;
@@ -269,7 +270,7 @@ function broadcastCommand(params: Parameters) {
     if (params.state !== 'status') {
         new Push(config).send('Kommand', command);
     }
-    broadcastUDP(command);
+    new Udp(config.udp).broadcast(command);
 }
 
 function execCommand(params: Parameters): Promise<IDeviceData | any> {
@@ -330,59 +331,6 @@ function getMobileApiResponse(): Promise<any> {
                 resolve(b);
             })
             .catch(() => reject());
-    });
-}
-
-function castMessage(msg: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-
-        if (config.dryRun) {
-            return resolve();
-        }
-
-        const notifier = new GoogleHomeNotifier(config.googleHome);
-        notifier.say(msg)
-            .then(() => {
-                resolve();
-            }).catch(() => {
-                reject();
-            });
-    });
-}
-
-function castURL(url: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-
-        if (config.dryRun) {
-            return resolve();
-        }
-
-        const notifier = new GoogleHomeNotifier(config.googleHome);
-        notifier.play(url)
-            .then(() => {
-                resolve();
-            }).catch(() => {
-                reject();
-            });
-    });
-}
-
-function broadcastUDP(msg: string): Promise<void> {
-    return new Promise((resolve, reject) => {
-
-        const message = new Buffer(msg);
-
-        const client = dgram.createSocket('udp4');
-        client.bind();
-        client.on('listening', () => {
-            client.setBroadcast(true);
-            client.send(message, 0, message.length, config.udp.port, config.udp.ip, (err) => {
-                if (err) { return reject(); }
-                console.log('UDP message sent to ' + config.udp.ip + ':' + config.udp.port);
-                client.close();
-                resolve();
-            });
-        });
     });
 }
 

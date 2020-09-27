@@ -83,8 +83,9 @@
               open=json.status;
               init=true;
               //$refs.purifier_status.innerHTML = json.status?'On' : 'Off';
-              $refs.purifier_temperature.innerHTML = json.temperature.toFixed()+'°C';
+              $refs.purifier_temperature.innerHTML = json.temperature.toFixed(1)+'°C';
               $refs.purifier_humidity.innerHTML = json.humidity+'%';
+              $refs.purifier_heat_index.innerHTML = json.heat_index.toFixed(1)+'°C';
               $refs.purifier_pm2_5.innerHTML = json.pm2_5;
             }catch(e){
               console.error('api failed!');
@@ -99,6 +100,7 @@
               </div>
               <span class="font-weight-bold">Room Temperature: </span><span x-ref="purifier_temperature"></span><br />
               <span class="font-weight-bold">Room Humidity: </span><span x-ref="purifier_humidity"></span><br />
+              <span class="font-weight-bold">Room Heat Index: </span><span x-ref="purifier_heat_index"></span><br />
               <span class="font-weight-bold">Room Air Quality (PM2.5): </span><span x-ref="purifier_pm2_5"></span><br />
             </div>
           </div>
