@@ -1,5 +1,5 @@
 export interface IDeviceData {
-    status: boolean;
+    power: boolean;
     temperature: number;
     humidity: number;
     pm2_5: number;

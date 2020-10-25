@@ -62,3 +62,5 @@ export function convertToFahrenheit(celsius) {
 export function convertToCelsius(fahrenheit) {
     return (fahrenheit - 32) * 5 / 9;
 }
+
+export function isNum(n): boolean { return /^\d+$/.test(n); }

@@ -14,6 +14,7 @@
 
   <!-- JS -->
   <script src="https://cdn.jsdelivr.net/gh/alpinejs/alpine@v2.x.x/dist/alpine.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jscolor/2.3.3/jscolor.min.js"></script>
 </head>
 
 <body class="d-flex flex-column min-vh-100" x-data="{}">
@@ -39,21 +40,23 @@
       <div class="row">
 
         <div class="col-lg-6">
-          <div class="card shadow mb-2" @mouseenter.once="
+
+          <div class="card shadow mb-2" x-data="{init: 0}" @mouseenter.once="
             let json = await executeKommand('energy','status');
             $refs.energy_usage.innerHTML = parseInt(json.data.CurrentConsumptions.amount, 10)+' BDT on '+ json.data.CurrentConsumptions.date;
-            $refs.energy_balance.innerHTML = parseInt(json.data.RemainingBalances.amount, 10)+' BDT on '+ json.data.RemainingBalances.date;              
+            $refs.energy_balance.innerHTML = parseInt(json.data.RemainingBalances.amount, 10)+' BDT on '+ json.data.RemainingBalances.date;   
+            init=1;
           ">
-            <div class="card-body">
-              <h5 class="card-title"><i class="fa fa-fw fa-bolt"></i>Electricity</h5>
+            <div class="card-header"><i class="fa fa-fw fa-bolt"></i>Electricity</div>
+            <div class="card-body" x-show="init">
               <span class="font-weight-bold">Usage: </span><span x-ref="energy_usage"></span><br />
               <span class="font-weight-bold">Balance: </span><span x-ref="energy_balance"></span><br />
             </div>
           </div>
 
           <div class="card shadow mb-2" x-data="mobileBalance()" @mouseenter.once="fetchMobileBalance()">
-            <div class="card-body">
-              <h5 class="card-title"><i class="fa fa-fw fa-mobile"></i>Mobile</h5>
+            <div class="card-header"><i class="fa fa-fw fa-mobile"></i>Mobile</div>
+            <div class="card-body" x-show="balance.init">
               <span class="font-weight-bold">Package: </span><span x-text="balance.esb.package"></span> (<span
                 x-text="balance.esb.activation"></span>)<br />
               <span class="font-weight-bold">Balance: </span><span x-text="balance.balance"></span> BDT<br />
@@ -69,45 +72,63 @@
               </ul>
             </div>
           </div>
-        </div>
-        <div class="col-lg-6">
-          <div class="card shadow mb-2" x-data="{ open: false, init: false }" x-init="
-          $watch('open', value =>{
-            if(init){
-              executeKommand('purifier', value?'on':'off');
-            }
-          });
-          " @mouseenter.once="
-            try{
-              let json = await executeKommand('purifier','status');
-              open=json.status;
-              init=true;
-              //$refs.purifier_status.innerHTML = json.status?'On' : 'Off';
-              $refs.purifier_temperature.innerHTML = json.temperature.toFixed(1)+'°C';
-              $refs.purifier_humidity.innerHTML = json.humidity+'%';
-              $refs.purifier_heat_index.innerHTML = json.heat_index.toFixed(1)+'°C';
-              $refs.purifier_pm2_5.innerHTML = json.pm2_5;
-            }catch(e){
-              console.error('api failed!');
-            }
-          ">
+
+          <div class="card shadow mb-2" x-data="{}">
+            <div class="card-header"><i class="fa fa-fw fa-toggle-on"></i>Motion Sensor</div>
             <div class="card-body">
-              <h5 class="card-title"><i class="fa fa-fw fa-pagelines"></i>Purifier</h5>
+              <div class="btn-group">
+                <button class="btn btn-outline-success btn-sm" @click="executeKommand('motion','on');">Turn On</button>
+                <button class="btn btn-outline-danger btn-sm" @click="executeKommand('motion','off');">Turn Off</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-6">
+
+          <div class="card shadow mb-2" x-data="purifierStatus()" @mouseenter.once="fetchPurifierStatus()">
+            <div class="card-header"><i class="fa fa-fw fa-pagelines"></i>Purifier</div>
+            <div class="card-body" x-show="status.init">
               <span class="font-weight-bold">Status:</span>
               <div class="form-check">
-                <input x-model="open" class="form-check-input" type="checkbox">
-                <label class="form-check-label" x-text="open?'On':'Off'"></label>
+                <input x-model="status.power" class="form-check-input" type="checkbox" x-ref="power"
+                  @change="executeKommand('purifier', $refs.power.checked?'on':'off');">
+                <label class="form-check-label" x-text="status.power?'On':'Off'"></label>
               </div>
-              <span class="font-weight-bold">Room Temperature: </span><span x-ref="purifier_temperature"></span><br />
-              <span class="font-weight-bold">Room Humidity: </span><span x-ref="purifier_humidity"></span><br />
-              <span class="font-weight-bold">Room Heat Index: </span><span x-ref="purifier_heat_index"></span><br />
-              <span class="font-weight-bold">Room Air Quality (PM2.5): </span><span x-ref="purifier_pm2_5"></span><br />
+              <span class="font-weight-bold">Room Temperature: </span><span
+                x-text="status.temperature.toFixed(1)+'°C'"></span><br />
+              <span class="font-weight-bold">Room Humidity: </span><span x-text="status.humidity+'%'"></span><br />
+              <span class="font-weight-bold">Room Heat Index: </span><span
+                x-text="status.heat_index.toFixed(1)+'°C'"></span><br />
+              <span class="font-weight-bold">Room Air Quality (PM2.5): </span><span x-text="status.pm2_5"></span><br />
+            </div>
+          </div>
+
+          <div class="card shadow mb-2" x-data="lightStatus()" @mouseenter.once="fetchLightStatus()">
+            <div class="card-header"><i class="fa fa-fw fa-toggle-on"></i>Light</div>
+            <div class="card-body" x-show="status.init">
+              <span class="font-weight-bold">Status:</span>
+              <div class="form-check">
+                <input x-model="status.power" class="form-check-input" type="checkbox" x-ref="power"
+                  @change="executeKommand('light', $refs.power.checked?'on':'off');">
+                <label class="form-check-label" x-text="status.power?'On':'Off'"></label>
+              </div>
+              <br />
+              <span class="font-weight-bold">Brightness (2-100): </span><span
+                x-text="status.brightness"></span><br /><input type="range" class="form-control-range"
+                x-ref="brightness" x-model="status.brightness" min="2" max="100" value="50"
+                @change="executeKommand('light', $refs.brightness.value);" />
+              <br />
+              <span class="font-weight-bold">Color:</span>
+              <input data-jscolor="{mode: 'HS', previewSize: 0}" :style="`background-color: ${status.color}`"
+                x-model="status.color" x-ref="color"
+                @change="executeKommand('light', $refs.color.value.replace('#',''));">
             </div>
           </div>
 
           <div class="card shadow mb-2" x-data="{temp:30}">
+            <div class="card-header"><i class="fa fa-fw fa-toggle-on"></i>Air Condition</div>
             <div class="card-body">
-              <h5 class="card-title"></i><i class="fa fa-fw fa-toggle-on"></i>Air Condition</h5>
               <div class="btn-group">
                 <button class="btn btn-outline-success btn-sm" @click="executeKommand('cooler','on');">Turn On</button>
                 <button class="btn btn-outline-danger btn-sm" @click="executeKommand('cooler','off');">Turn Off</button>
@@ -118,16 +139,9 @@
             </div>
           </div>
 
-          <div class="card shadow mb-2" x-data="{}">
-            <div class="card-body">
-              <h5 class="card-title"></i><i class="fa fa-fw fa-toggle-on"></i>Motion Sensor</h5>
-              <div class="btn-group">
-                <button class="btn btn-outline-success btn-sm" @click="executeKommand('motion','on');">Turn On</button>
-                <button class="btn btn-outline-danger btn-sm" @click="executeKommand('motion','off');">Turn Off</button>
-              </div>
-            </div>
-          </div>
         </div>
+
+      </div>
   </main>
 
   <footer>
@@ -152,6 +166,7 @@
     function mobileBalance() {
       return {
         balance: {
+          init: 0,
           balance: 0,
           internet: { value: 0 },
           voice: { value: 0 },
@@ -162,9 +177,45 @@
         async fetchMobileBalance() {
           let json = await executeKommand('mobile', 'status');
           this.balance = json;
+          this.balance.init = 1;
         }
       }
     }
+
+    function lightStatus() {
+      return {
+        status: {
+          init: 0,
+          power: false,
+          color: '',
+          brightness: -1,
+        },
+        async fetchLightStatus() {
+          let json = await executeKommand('light', 'status');
+          this.status = json;
+          this.status.init = 1;
+        }
+      }
+    }
+
+    function purifierStatus() {
+      return {
+        status: {
+          init: 0,
+          power: false,
+          temperature: -1,
+          humidity: -1,
+          pm2_5: -1,
+          heat_index: -1
+        },
+        async fetchPurifierStatus() {
+          let json = await executeKommand('purifier', 'status');
+          this.status = json;
+          this.status.init = 1;
+        }
+      }
+    }
+
   </script>
 
 </body>

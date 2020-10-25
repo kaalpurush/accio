@@ -1,5 +1,5 @@
 import * as express from 'express';
-// import * as basicAuth from 'express-basic-auth';
+import * as basicAuth from 'express-basic-auth';
 import * as http from 'http';
 import * as https from 'https';
 import * as bodyParser from 'body-parser';
@@ -18,9 +18,12 @@ import { Udp } from './udp';
 import { Cast } from './cast';
 import * as tools from './tools';
 
+import { color } from 'abstract-things/values';
+
 let airDevice: any;
 let motionSensor = false;
 
+const SALUTATION_MSG = 'Hey Boss!';
 const SUCCESS_MSG = 'Done sir!';
 const FAIL_MSG = 'Sorry, failed!';
 const ANYTHING_ELSE_MSG = 'Anything else, sir?';
@@ -64,7 +67,7 @@ app.get('/motion', (req: express.Request, res: express.Response) => {
         const devices = config.motionSensorName;
         const id = req.query.id;
         if (devices[id] !== undefined) {
-            new Cast(config.googleHome).sendMessage('motion in ' + devices[id])
+            new Cast(config.googleHome).sendMessage(SALUTATION_MSG + ' motion in ' + devices[id])
                 .then(() => {
                     return new Push(config).send('Motion Trigger', 'motion in ' + devices[id]);
                 }).then(() => {
@@ -146,7 +149,7 @@ app.post('/web-push', (req: express.Request, res: express.Response) => {
         });
 });
 
-app.get('/dash', (req: express.Request, res: express.Response) => {
+app.get('/dash', basicAuth(config.auth), (req: express.Request, res: express.Response) => {
     res.sendFile('public/dashboard.html', { root: __dirname + '/../' });
 });
 
@@ -165,7 +168,7 @@ httpServer.listen(80, () => {
 function getAirStatus() {
     return new Promise<IDeviceData>((resolve, reject) => {
         miio
-            .device({ address: config.miIOT.ip, token: config.miIOT.token })
+            .device({ address: config.miIOT.purifier.ip, token: config.miIOT.purifier.token })
             .then((device: any) => {
                 addAirEventHandler(device);
                 return Promise.all(
@@ -179,7 +182,7 @@ function getAirStatus() {
             })
             .then(([s, t, h, p]) => {
                 resolve({
-                    status: s, temperature: t.celsius, humidity: h, pm2_5: p,
+                    power: s, temperature: t.celsius, humidity: h, pm2_5: p,
                     heat_index: tools.convertToCelsius(
                         tools.calculateHI(
                             tools.convertToFahrenheit(t.celsius), h))
@@ -196,9 +199,32 @@ function addAirEventHandler(device: any) {
         //     sendPush('Kommand', 'Purifier State: ' + (power === true ? 'On' : 'Off'));
         // });
         airDevice.on('pm2.5Changed', (pm2_5: number) => {
-            new Push(config).send('Purifier Status', 'PM2.5: ' + pm2_5, 'purifier');
+            // new Push(config).send('Purifier Status', 'PM2.5: ' + pm2_5, 'purifier');
+            checkPurifier(pm2_5);
+        });
+
+        device.on('temperature', (temp) => {
+            checkHeatIndex();
+        });
+
+        device.on('relativeHumidityChanged', (rh) => {
+            checkHeatIndex();
         });
     }
+}
+
+function checkPurifier(pm2_5: number) {
+    if (pm2_5 > 41) {
+        new Cast(config.googleHome).sendMessage(`${SALUTATION_MSG} room PM2.5 concentration is ${pm2_5.toFixed()}. Consider turning on the purifier.`);
+    }
+}
+
+function checkHeatIndex() {
+    getAirStatus().then((r: IDeviceData) => {
+        if (r.heat_index > 40) {
+            new Cast(config.googleHome).sendMessage(`${SALUTATION_MSG}, room Heat Index is ${r.heat_index.toFixed()}. Consider turning on the cooler.`);
+        }
+    });
 }
 
 function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
@@ -210,7 +236,7 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
                 Humidity: ${r.humidity}%
                 Heat Index: ${r.heat_index.toFixed(1)} °C
                 Air Quality: ${r.pm2_5}
-                Air Purifier: ${r.status === true ? 'On' : 'Off'}
+                Air Purifier: ${r.power === true ? 'On' : 'Off'}
                 `;
                 conv.ask(text
                     // new SimpleResponse({ speech: text, text: '' }),
@@ -259,6 +285,20 @@ function processAssistantIntent(conv: DialogflowConversation<any, any, any>) {
             });
     }
 
+    if (conv.parameters.device === 'light' && conv.parameters.state === 'status') {
+        return execCommand(conv.parameters)
+            .then((r: any) => {
+                const text = `
+                Status: ${r}
+                `;
+                conv.ask(text);
+            })
+            .catch((e) => {
+                console.error(e);
+                conv.ask(FAIL_MSG);
+            });
+    }
+
     return execCommand(conv.parameters)
         .then(() => conv.ask(SUCCESS_MSG))
         .catch(() => conv.ask(FAIL_MSG));
@@ -295,8 +335,58 @@ function execCommand(params: Parameters): Promise<IDeviceData | any> {
                     .catch(() => reject());
             } else {
                 miio
-                    .device({ address: config.miIOT.ip, token: config.miIOT.token })
+                    .device({
+                        address: config.miIOT.purifier.ip,
+                        token: config.miIOT.purifier.token
+                    })
                     .then((device: any) => device.setPower(params.state === 'on'))
+                    .then(() => resolve())
+                    .catch(() => reject());
+            }
+        } else if (params.device === 'light') {
+            if (params.state === 'status') {
+                miio
+                    .device({
+                        address: config.miIOT.light.ip,
+                        token: config.miIOT.light.token
+                    })
+                    .then((device: any) =>
+                        Promise.all([
+                            device.power(),
+                            device.color(),
+                            device.brightness()
+                        ]))
+                    .then(([power, c, brightness]: any) =>
+                        resolve({ power, color: color(c).hex, brightness }))
+                    .catch((e) => { console.error(e); reject(); });
+            } else if (params.state === 'on' || params.state === 'off') {
+                miio
+                    .device({
+                        address: config.miIOT.light.ip,
+                        token: config.miIOT.light.token
+                    })
+                    .then((device: any) => device.setPower(params.state === 'on'))
+                    .then(() => resolve())
+                    .catch(() => reject());
+            } else if (tools.isNum(params.state)) {
+                const state = params.state;
+                if (state && +state > 1 && +state < 101) {
+                    miio
+                        .device({
+                            address: config.miIOT.light.ip,
+                            token: config.miIOT.light.token
+                        })
+                        .then((device: any) => device.setBrightness(+state, 1000))
+                        .then(() => resolve())
+                        .catch(() => reject());
+                }
+            } else {
+                miio
+                    .device({
+                        address: config.miIOT.light.ip,
+                        token: config.miIOT.light.token
+                    })
+                    .then((device: any) => device.color('#' + params.state, 1000))
                     .then(() => resolve())
                     .catch(() => reject());
             }
